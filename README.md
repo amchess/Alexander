@@ -217,7 +217,7 @@ Only in multi mcts mode, for Upper Confidence Bound.
 
 #### Live Book (checkbox)
 
-_Boolean, Default: False_ If activated, the engine uses the livebook as primary choice.
+Default is Off: no livebook. The other values are "NoEgtbs" (no livebook for an endgame with at max 7 mens), "Egtbs" (livebook only for an endgame with at max 7 mens) and "Both" (the livebook whenever is possible).
 
 #### Live Book URL
 The default is the online chessdb [https://www.chessdb.cn/queryc_en/](https://www.chessdb.cn/queryc_en/), a wonderful project by noobpwnftw (thanks to him!)
@@ -245,7 +245,7 @@ _Boolean, Default: False_ If activated, the engine sends a move, not in live che
 
 #### Live Book Depth
 
-_Default 100, min 1, max 100_ Depth of live book moves.
+_Default 255, min 1, max 255_ Depth of live book moves.
 
 ### Full depth threads
 
@@ -263,7 +263,6 @@ _Boolean, Default: False_
 Set this option to true when running under CuteChess and you experiences problems with concurrency > 1
 When this option is true, the saved experience file name will be modified to something like experience-64a4c665c57504a4.bin
 (64a4c665c57504a4 is random). Each concurrent instance of BrainLearn will have its own experience file name, however, all the concurrent instances will read "experience.bin" at start up.
-
 
 ### Persisted learning
 
