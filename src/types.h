@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -38,7 +38,8 @@
 
     #include <cassert>
     #include <cstdint>
-
+    #include <cstddef>
+    
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
         #pragma warning(disable: 4127)  // Conditional expression is constant
@@ -113,12 +114,11 @@ enum Color {
     BLACK,
     COLOR_NB = 2
 };
-
-constexpr Color Colors[2] = {WHITE, BLACK};  //kelly
+//kelly begin
+constexpr Color Colors[2] = {WHITE, BLACK};
 
 enum CastlingRights {
-    NO_CASTLING,
-    WHITE_OO,
+    WHITE_OO  = 1,
     WHITE_OOO = WHITE_OO << 1,
     BLACK_OO  = WHITE_OO << 2,
     BLACK_OOO = WHITE_OO << 3,
@@ -131,7 +131,8 @@ enum CastlingRights {
 
     CASTLING_RIGHT_NB = 16
 };
-
+////kelly end
+//for classical begin
 enum Phase {
     PHASE_ENDGAME,
     PHASE_MIDGAME = 128,
@@ -146,7 +147,7 @@ enum ScaleFactor {
     SCALE_FACTOR_MAX    = 128,
     SCALE_FACTOR_NONE   = 255
 };
-
+//for classical end
 enum Bound {
     BOUND_NONE,
     BOUND_UPPER,
@@ -154,9 +155,9 @@ enum Bound {
     BOUND_EXACT = BOUND_UPPER | BOUND_LOWER
 };
 
-// Value is used as an alias for int16_t, this is done to differentiate between
-// a search value and any other integer value. The values used in search are always
-// supposed to be in the range (-VALUE_NONE, VALUE_NONE] and should not exceed this range.
+// Value is used as an alias for int, this is done to differentiate between a search
+// value and any other integer value. The values used in search are always supposed
+// to be in the range (-VALUE_NONE, VALUE_NONE] and should not exceed this range.
 using Value = int;
 
 constexpr Value VALUE_ZERO      = 0;
@@ -216,7 +217,7 @@ enum Piece {
     PIECE_NB = 16
 };
 // clang-format on
-
+//for classical begin
 constexpr Value PieceValueForPSQT[PHASE_NB][PIECE_NB] = {
   {VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg, VALUE_ZERO,
    VALUE_ZERO, VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg,
@@ -224,7 +225,7 @@ constexpr Value PieceValueForPSQT[PHASE_NB][PIECE_NB] = {
   {VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg, VALUE_ZERO,
    VALUE_ZERO, VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg,
    VALUE_ZERO, VALUE_ZERO}};
-
+//for classical end
 constexpr Value PieceValue[PIECE_NB] = {
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO};
@@ -232,12 +233,21 @@ constexpr Value PieceValue[PIECE_NB] = {
 using Depth = int;
 
 enum : int {
-    DEPTH_QS_CHECKS    = 0,
-    DEPTH_QS_NO_CHECKS = -1,
-
-    DEPTH_NONE = -6,
-
-    DEPTH_OFFSET = -7  // value used only for TT entry occupancy check
+    // The following DEPTH_ constants are used for transposition table entries
+    // and quiescence search move generation stages. In regular search, the
+    // depth stored in the transposition table is literal: the search depth
+    // (effort) used to make the corresponding transposition table value. In
+    // quiescence search, however, the transposition table entries only store
+    // the current quiescence move generation stage (which should thus compare
+    // lower than any regular search depth).
+    DEPTH_QS = 0,
+    // For transposition table entries where no searching at all was done
+    // (whether regular or qsearch) we use DEPTH_UNSEARCHED, which should thus
+    // compare lower than any quiescence or regular depth. DEPTH_ENTRY_OFFSET
+    // is used only for the transposition table entry occupancy check (see tt.cpp),
+    // and should thus be lower than DEPTH_UNSEARCHED.
+    DEPTH_UNSEARCHED   = -2,
+    DEPTH_ENTRY_OFFSET = -3
 };
 
 // clang-format off
@@ -326,21 +336,23 @@ enum {
 };
 
 // End Shashin section
-
-/// Score enum stores a middlegame and an endgame value in a single integer (enum).
+//for classical begin
+/// ScoreForClassical enum stores a middlegame and an endgame value in a single integer (enum).
 /// The least significant 16 bits are used to store the middlegame value and the
 /// upper 16 bits are used to store the endgame value. We have to take care to
 /// avoid left-shifting a signed int to avoid undefined behavior.
-enum Score : int {
+enum ScoreForClassical : int {
     SCORE_ZERO
 };
 
-constexpr Score make_score(int mg, int eg) { return Score((int) ((unsigned int) eg << 16) + mg); }
+constexpr ScoreForClassical make_score(int mg, int eg) {
+    return ScoreForClassical((int) ((unsigned int) eg << 16) + mg);
+}
 
 /// Extracting the signed lower and upper 16 bits is not so trivial because
 /// according to the standard a simple cast to short is implementation defined
 /// and so is a right shift of a signed integer.
-inline Value eg_value(Score s) {
+inline Value eg_value(ScoreForClassical s) {
     union {
         uint16_t u;
         int16_t  s;
@@ -348,7 +360,7 @@ inline Value eg_value(Score s) {
     return Value(eg.s);
 }
 
-inline Value mg_value(Score s) {
+inline Value mg_value(ScoreForClassical s) {
     union {
         uint16_t u;
         int16_t  s;
@@ -362,11 +374,11 @@ inline Value mg_value(Score s) {
         constexpr T operator-(T d) { return T(-int(d)); } \
         inline T&   operator+=(T& d1, int d2) { return d1 = d1 + d2; } \
         inline T&   operator-=(T& d1, int d2) { return d1 = d1 - d2; }
-
+//for classical end
     #define ENABLE_INCR_OPERATORS_ON(T) \
         inline T& operator++(T& d) { return d = T(int(d) + 1); } \
         inline T& operator--(T& d) { return d = T(int(d) - 1); }
-
+//for classical begin
     #define ENABLE_FULL_OPERATORS_ON(T) \
         ENABLE_BASE_OPERATORS_ON(T) \
         constexpr T   operator*(int i, T d) { return T(i * int(d)); } \
@@ -378,17 +390,18 @@ inline Value mg_value(Score s) {
 ENABLE_FULL_OPERATORS_ON(Direction)
 
 ENABLE_INCR_OPERATORS_ON(Piece)
-
+//for classical end
 ENABLE_INCR_OPERATORS_ON(PieceType)
 ENABLE_INCR_OPERATORS_ON(Square)
 ENABLE_INCR_OPERATORS_ON(File)
 ENABLE_INCR_OPERATORS_ON(Rank)
-
-ENABLE_BASE_OPERATORS_ON(Score)
+//for classical begin
+ENABLE_BASE_OPERATORS_ON(ScoreForClassical)
 
     #undef ENABLE_FULL_OPERATORS_ON
+//for classical end
     #undef ENABLE_INCR_OPERATORS_ON
-    #undef ENABLE_BASE_OPERATORS_ON
+    #undef ENABLE_BASE_OPERATORS_ON  //for classical
 
 //omitted for classical eval
 
@@ -397,18 +410,20 @@ constexpr Square operator+(Square s, Direction d) { return Square(int(s) + int(d
 constexpr Square operator-(Square s, Direction d) { return Square(int(s) - int(d)); }
 inline Square&   operator+=(Square& s, Direction d) { return s = s + d; }
 inline Square&   operator-=(Square& s, Direction d) { return s = s - d; }
-
+//for classical begin
 /// Only declared but not defined. We don't want to multiply two scores due to
 /// a very high risk of overflow. So user should explicitly convert to integer.
-Score operator*(Score, Score) = delete;
+ScoreForClassical operator*(ScoreForClassical, ScoreForClassical) = delete;
 
 /// Division of a Score must be handled separately for each term
-inline Score operator/(Score s, int i) { return make_score(mg_value(s) / i, eg_value(s) / i); }
+inline ScoreForClassical operator/(ScoreForClassical s, int i) {
+    return make_score(mg_value(s) / i, eg_value(s) / i);
+}
 
 /// Multiplication of a Score by an integer. We check for overflow in debug mode.
-inline Score operator*(Score s, int i) {
+inline ScoreForClassical operator*(ScoreForClassical s, int i) {
 
-    Score result = Score(int(s) * i);
+    ScoreForClassical result = ScoreForClassical(int(s) * i);
 
     assert(eg_value(result) == (i * eg_value(s)));
     assert(mg_value(result) == (i * mg_value(s)));
@@ -418,8 +433,8 @@ inline Score operator*(Score s, int i) {
 }
 
 /// Multiplication of a Score by a boolean
-inline Score operator*(Score s, bool b) { return b ? s : SCORE_ZERO; }
-
+inline ScoreForClassical operator*(ScoreForClassical s, bool b) { return b ? s : SCORE_ZERO; }
+//for classical end
 
 // Toggle color
 constexpr Color operator~(Color c) { return Color(c ^ BLACK); }
@@ -488,9 +503,10 @@ enum MoveType {
 // bit 14-15: special move flag: promotion (1), en passant (2), castling (3)
 // NOTE: en passant bit is set only when a pawn can be captured
 //
-// Special cases are Move::none() and Move::null(). We can sneak these in because in
-// any normal move destination square is always different from origin square
-// while Move::none() and Move::null() have the same origin and destination square.
+// Special cases are Move::none() and Move::null(). We can sneak these in because
+// in any normal move the destination square and origin square are always different,
+// but Move::none() and Move::null() have the same origin and destination square.
+
 class Move {
    public:
     Move() = default;
@@ -534,12 +550,13 @@ class Move {
     constexpr std::uint16_t raw() const { return data; }
 
     struct MoveHash {
-        std::size_t operator()(const Move& m) const { return make_key(m.data); }
+        size_t operator()(const Move& m) const { return make_key(m.data); }
     };
 
    protected:
     std::uint16_t data;
 };
+
 }  // namespace Alexander
 
 #endif  // #ifndef TYPES_H_INCLUDED

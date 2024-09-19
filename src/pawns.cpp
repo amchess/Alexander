@@ -32,18 +32,18 @@ namespace {
 #define S(mg, eg) make_score(mg, eg)
 
 // Pawn penalties
-constexpr Score Backward      = S(6, 19);
-constexpr Score Doubled       = S(11, 51);
-constexpr Score DoubledEarly  = S(17, 7);
-constexpr Score Isolated      = S(1, 20);
-constexpr Score WeakLever     = S(2, 57);
-constexpr Score WeakUnopposed = S(15, 18);
+constexpr ScoreForClassical Backward      = S(6, 19);
+constexpr ScoreForClassical Doubled       = S(11, 51);
+constexpr ScoreForClassical DoubledEarly  = S(17, 7);
+constexpr ScoreForClassical Isolated      = S(1, 20);
+constexpr ScoreForClassical WeakLever     = S(2, 57);
+constexpr ScoreForClassical WeakUnopposed = S(15, 18);
 
 // Bonus for blocked pawns at 5th or 6th rank
-constexpr Score BlockedPawn[2] = {S(-19, -8), S(-7, 3)};
+constexpr ScoreForClassical BlockedPawn[2] = {S(-19, -8), S(-7, 3)};
 
-constexpr Score BlockedStorm[RANK_NB] = {S(0, 0),    S(0, 0),  S(64, 75), S(-3, 14),
-                                         S(-12, 19), S(-7, 4), S(-10, 5)};
+constexpr ScoreForClassical BlockedStorm[RANK_NB] = {S(0, 0),    S(0, 0),  S(64, 75), S(-3, 14),
+                                                     S(-12, 19), S(-7, 4), S(-10, 5)};
 
 // Connected pawn bonus
 constexpr int Connected[RANK_NB] = {0, 3, 7, 7, 15, 54, 86};
@@ -69,7 +69,7 @@ constexpr Value UnblockedStorm[int(FILE_NB) / 2][RANK_NB] = {
 
 // KingOnFile[semi-open Us][semi-open Them] contains bonuses/penalties
 // for king when the king is on a semi-open or open file.
-constexpr Score KingOnFile[2][2] = {{S(-18, 11), S(-6, -3)}, {S(0, 0), S(5, -4)}};
+constexpr ScoreForClassical KingOnFile[2][2] = {{S(-18, 11), S(-6, -3)}, {S(0, 0), S(5, -4)}};
 
 #undef S
 #undef V
@@ -81,18 +81,18 @@ constexpr Score KingOnFile[2][2] = {{S(-18, 11), S(-6, -3)}, {S(0, 0), S(5, -4)}
 /// be re-used even when the pieces have moved.
 
 template<Color Us>
-Score evaluate(const Position& pos, Pawns::Entry* e) {
+ScoreForClassical evaluate(const Position& pos, Pawns::Entry* e) {
 
     constexpr Color     Them = ~Us;
     constexpr Direction Up   = pawn_push(Us);
     constexpr Direction Down = -Up;
 
-    Bitboard neighbours, stoppers, support, phalanx, opposed;
-    Bitboard lever, leverPush, blocked;
-    Square   s;
-    bool     backward, passed, doubled;
-    Score    score = SCORE_ZERO;
-    Bitboard b     = pos.pieces(Us, PAWN);
+    Bitboard          neighbours, stoppers, support, phalanx, opposed;
+    Bitboard          lever, leverPush, blocked;
+    Square            s;
+    bool              backward, passed, doubled;
+    ScoreForClassical score = SCORE_ZERO;
+    Bitboard          b     = pos.pieces(Us, PAWN);
 
     Bitboard ourPawns   = pos.pieces(Us, PAWN);
     Bitboard theirPawns = pos.pieces(Them, PAWN);
@@ -156,7 +156,7 @@ Score evaluate(const Position& pos, Pawns::Entry* e) {
         if (passed)
             e->passedPawns[Us] |= s;
 
-        // Score this pawn
+        // ScoreForClassical this pawn
         if (support | phalanx)
         {
             int v = Connected[r] * (2 + bool(phalanx) - bool(opposed)) + 22 * popcount(support);
@@ -217,7 +217,7 @@ Entry* probe(const Position& pos) {
 /// penalty for a king, looking at the king file and the two closest files.
 
 template<Color Us>
-Score Entry::evaluate_shelter(const Position& pos, Square ksq) const {
+ScoreForClassical Entry::evaluate_shelter(const Position& pos, Square ksq) const {
 
     constexpr Color Them = ~Us;
 
@@ -225,7 +225,7 @@ Score Entry::evaluate_shelter(const Position& pos, Square ksq) const {
     Bitboard ourPawns   = b & pos.pieces(Us) & ~pawnAttacks[Them];
     Bitboard theirPawns = b & pos.pieces(Them);
 
-    Score bonus = make_score(5, 5);
+    ScoreForClassical bonus = make_score(5, 5);
 
     File center = std::clamp(file_of(ksq), FILE_B, FILE_G);
     for (File f = File(center - 1); f <= File(center + 1); ++f)
@@ -256,14 +256,16 @@ Score Entry::evaluate_shelter(const Position& pos, Square ksq) const {
 /// when king square changes, which is about 20% of total king_safety() calls.
 
 template<Color Us>
-Score Entry::do_king_safety(const Position& pos) {
+ScoreForClassical Entry::do_king_safety(const Position& pos) {
 
     Square ksq         = pos.square<KING>(Us);
     kingSquares[Us]    = ksq;
     castlingRights[Us] = pos.castling_rights(Us);
-    auto compare       = [](Score a, Score b) { return mg_value(a) < mg_value(b); };
+    auto compare       = [](ScoreForClassical a, ScoreForClassical b) {
+        return mg_value(a) < mg_value(b);
+    };
 
-    Score shelter = evaluate_shelter<Us>(pos, ksq);
+    ScoreForClassical shelter = evaluate_shelter<Us>(pos, ksq);
 
     // If we can castle use the bonus after castling if it is bigger
 
@@ -287,8 +289,8 @@ Score Entry::do_king_safety(const Position& pos) {
 }
 
 // Explicit template instantiation
-template Score Entry::do_king_safety<WHITE>(const Position& pos);
-template Score Entry::do_king_safety<BLACK>(const Position& pos);
+template ScoreForClassical Entry::do_king_safety<WHITE>(const Position& pos);
+template ScoreForClassical Entry::do_king_safety<BLACK>(const Position& pos);
 
 }  // namespace Pawns
 

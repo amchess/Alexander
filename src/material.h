@@ -37,10 +37,10 @@ namespace Alexander::Material {
 
 struct Entry {
 
-    Score imbalance() const { return score; }
-    Phase game_phase() const { return (Phase) gamePhase; }
-    bool  specialized_eval_exists() const { return evaluationFunction != nullptr; }
-    Value evaluate(const Position& pos) const { return (*evaluationFunction)(pos); }
+    ScoreForClassical imbalance() const { return score; }
+    Phase             game_phase() const { return (Phase) gamePhase; }
+    bool              specialized_eval_exists() const { return evaluationFunction != nullptr; }
+    Value             evaluate(const Position& pos) const { return (*evaluationFunction)(pos); }
 
     // scale_factor() takes a position and a color as input and returns a scale factor
     // for the given color. We have to provide the position in addition to the color
@@ -56,9 +56,9 @@ struct Entry {
     const EndgameBase<Value>*       evaluationFunction;
     const EndgameBase<ScaleFactor>* scalingFunction[COLOR_NB];  // Could be one for each
                                                                 // side (e.g. KPKP, KBPsK)
-    Score   score;
-    int16_t gamePhase;
-    uint8_t factor[COLOR_NB];
+    ScoreForClassical score;
+    int16_t           gamePhase;
+    uint8_t           factor[COLOR_NB];
 };
 
 using Table = HashTable<Entry, 8192>;

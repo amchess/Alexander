@@ -73,18 +73,18 @@ enum Term {  // The first 8 entries are reserved for PieceType
     TERM_NB
 };
 
-Score scores[TERM_NB][COLOR_NB];
+ScoreForClassical scores[TERM_NB][COLOR_NB];
 
 static double to_cp(Value v) { return double(v) / NormalizeToPawnValue; }  //from classical eval
 
-static void add(int idx, Color c, Score s) { scores[idx][c] = s; }
+static void add(int idx, Color c, ScoreForClassical s) { scores[idx][c] = s; }
 
-static void add(int idx, Score w, Score b = SCORE_ZERO) {
+static void add(int idx, ScoreForClassical w, ScoreForClassical b = SCORE_ZERO) {
     scores[idx][WHITE] = w;
     scores[idx][BLACK] = b;
 }
 
-static std::ostream& operator<<(std::ostream& os, Score s) {
+static std::ostream& operator<<(std::ostream& os, ScoreForClassical s) {
     os << std::setw(5) << to_cp(mg_value(s)) << " " << std::setw(5) << to_cp(eg_value(s));
     return os;
 }
@@ -158,7 +158,7 @@ struct Weight {
 
 // MobilityBonus[PieceType-2][attacked] contains bonuses for middle and end game,
 // indexed by piece type and number of attacked squares in the mobility area.
-constexpr Score MobilityBonus[][32] = {
+constexpr ScoreForClassical MobilityBonus[][32] = {
   {S(-62, -79), S(-53, -57), S(-12, -31), S(-3, -17), S(3, 7), S(12, 13),  // Knight
    S(21, 16), S(28, 21), S(37, 26)},
   {S(-47, -59), S(-20, -25), S(14, -8), S(29, 12), S(39, 21), S(53, 40),  // Bishop
@@ -174,54 +174,54 @@ constexpr Score MobilityBonus[][32] = {
 
 // BishopPawns[distance from edge] contains a file-dependent penalty for pawns on
 // squares of the same color as our bishop.
-constexpr Score BishopPawns[int(FILE_NB) / 2] = {S(3, 8), S(3, 9), S(2, 7), S(3, 7)};
+constexpr ScoreForClassical BishopPawns[int(FILE_NB) / 2] = {S(3, 8), S(3, 9), S(2, 7), S(3, 7)};
 
 // KingProtector[knight/bishop] contains penalty for each distance unit to own king
-constexpr Score KingProtector[] = {S(9, 9), S(7, 9)};
+constexpr ScoreForClassical KingProtector[] = {S(9, 9), S(7, 9)};
 
 // Outpost[knight/bishop] contains bonuses for each knight or bishop occupying a
 // pawn protected square on rank 4 to 6 which is also safe from a pawn attack.
-constexpr Score Outpost[] = {S(54, 34), S(31, 25)};
+constexpr ScoreForClassical Outpost[] = {S(54, 34), S(31, 25)};
 
 // PassedRank[Rank] contains a bonus according to the rank of a passed pawn
-constexpr Score PassedRank[RANK_NB] = {S(0, 0),   S(2, 38),    S(15, 36),  S(22, 50),
-                                       S(64, 81), S(166, 184), S(284, 269)};
+constexpr ScoreForClassical PassedRank[RANK_NB] = {S(0, 0),   S(2, 38),    S(15, 36),  S(22, 50),
+                                                   S(64, 81), S(166, 184), S(284, 269)};
 
-constexpr Score RookOnClosedFile = S(10, 5);
-constexpr Score RookOnOpenFile[] = {S(18, 8), S(49, 26)};
+constexpr ScoreForClassical RookOnClosedFile = S(10, 5);
+constexpr ScoreForClassical RookOnOpenFile[] = {S(18, 8), S(49, 26)};
 
 // ThreatByMinor/ByRook[attacked PieceType] contains bonuses according to
 // which piece type attacks which one. Attacks on lesser pieces which are
 // pawn-defended are not considered.
-constexpr Score ThreatByMinor[PIECE_TYPE_NB] = {S(0, 0),   S(6, 37),    S(64, 50),
-                                                S(82, 57), S(103, 130), S(81, 163)};
+constexpr ScoreForClassical ThreatByMinor[PIECE_TYPE_NB] = {S(0, 0),   S(6, 37),    S(64, 50),
+                                                            S(82, 57), S(103, 130), S(81, 163)};
 
-constexpr Score ThreatByRook[PIECE_TYPE_NB] = {S(0, 0),   S(3, 44), S(36, 71),
-                                               S(44, 59), S(0, 39), S(60, 39)};
+constexpr ScoreForClassical ThreatByRook[PIECE_TYPE_NB] = {S(0, 0),   S(3, 44), S(36, 71),
+                                                           S(44, 59), S(0, 39), S(60, 39)};
 
 constexpr Value CorneredBishop = Value(50);
 
 // Assorted bonuses and penalties
-constexpr Score UncontestedOutpost  = S(0, 10);
-constexpr Score BishopOnKingRing    = S(24, 0);
-constexpr Score BishopXRayPawns     = S(4, 5);
-constexpr Score FlankAttacks        = S(8, 0);
-constexpr Score Hanging             = S(72, 40);
-constexpr Score KnightOnQueen       = S(16, 11);
-constexpr Score LongDiagonalBishop  = S(45, 0);
-constexpr Score MinorBehindPawn     = S(18, 3);
-constexpr Score PassedFile          = S(13, 8);
-constexpr Score PawnlessFlank       = S(19, 97);
-constexpr Score ReachableOutpost    = S(33, 19);
-constexpr Score RestrictedPiece     = S(6, 7);
-constexpr Score RookOnKingRing      = S(16, 0);
-constexpr Score SliderOnQueen       = S(62, 21);
-constexpr Score ThreatByKing        = S(24, 87);
-constexpr Score ThreatByPawnPush    = S(48, 39);
-constexpr Score ThreatBySafePawn    = S(167, 99);
-constexpr Score TrappedRook         = S(55, 13);
-constexpr Score WeakQueenProtection = S(14, 0);
-constexpr Score WeakQueen           = S(57, 19);
+constexpr ScoreForClassical UncontestedOutpost  = S(0, 10);
+constexpr ScoreForClassical BishopOnKingRing    = S(24, 0);
+constexpr ScoreForClassical BishopXRayPawns     = S(4, 5);
+constexpr ScoreForClassical FlankAttacks        = S(8, 0);
+constexpr ScoreForClassical Hanging             = S(72, 40);
+constexpr ScoreForClassical KnightOnQueen       = S(16, 11);
+constexpr ScoreForClassical LongDiagonalBishop  = S(45, 0);
+constexpr ScoreForClassical MinorBehindPawn     = S(18, 3);
+constexpr ScoreForClassical PassedFile          = S(13, 8);
+constexpr ScoreForClassical PawnlessFlank       = S(19, 97);
+constexpr ScoreForClassical ReachableOutpost    = S(33, 19);
+constexpr ScoreForClassical RestrictedPiece     = S(6, 7);
+constexpr ScoreForClassical RookOnKingRing      = S(16, 0);
+constexpr ScoreForClassical SliderOnQueen       = S(62, 21);
+constexpr ScoreForClassical ThreatByKing        = S(24, 87);
+constexpr ScoreForClassical ThreatByPawnPush    = S(48, 39);
+constexpr ScoreForClassical ThreatBySafePawn    = S(167, 99);
+constexpr ScoreForClassical TrappedRook         = S(55, 13);
+constexpr ScoreForClassical WeakQueenProtection = S(14, 0);
+constexpr ScoreForClassical WeakQueen           = S(57, 19);
 
 
 #undef S
@@ -241,22 +241,22 @@ class Evaluation {
     template<Color Us>
     void initialize();
     template<Color Us, PieceType Pt>
-    Score pieces();
+    ScoreForClassical pieces();
     template<Color Us>
-    Score king() const;
+    ScoreForClassical king() const;
     template<Color Us>
-    Score threats() const;
+    ScoreForClassical threats() const;
     template<Color Us>
-    Score passed() const;
+    ScoreForClassical passed() const;
     template<Color Us>
-    Score space() const;
-    Value winnable(Score score) const;
+    ScoreForClassical space() const;
+    Value             winnable(ScoreForClassical score) const;
 
-    const Position&  pos;
-    Material::Entry* me;
-    Pawns::Entry*    pe;
-    Bitboard         mobilityArea[COLOR_NB];
-    Score            mobility[COLOR_NB] = {SCORE_ZERO, SCORE_ZERO};
+    const Position&   pos;
+    Material::Entry*  me;
+    Pawns::Entry*     pe;
+    Bitboard          mobilityArea[COLOR_NB];
+    ScoreForClassical mobility[COLOR_NB] = {SCORE_ZERO, SCORE_ZERO};
 
     // attackedBy[color][piece type] is a bitboard representing all squares
     // attacked by a given color and piece type. Special "piece types" which
@@ -298,7 +298,7 @@ inline Value apply_weight(Value v, int wi) {
         return v * Weights[wi].eg / 100;
 }
 
-inline Score apply_weights(Score s, int wi) {
+inline ScoreForClassical apply_weights(ScoreForClassical s, int wi) {
     return make_score(apply_weight<MG>(mg_value(s), wi), apply_weight<EG>(eg_value(s), wi));
 }
 //handicap mode end
@@ -349,15 +349,15 @@ void Evaluation<T>::initialize() {
 
 template<Tracing T>
 template<Color Us, PieceType Pt>
-Score Evaluation<T>::pieces() {
+ScoreForClassical Evaluation<T>::pieces() {
 
     constexpr Color                      Them = ~Us;
     [[maybe_unused]] constexpr Direction Down = -pawn_push(Us);
     [[maybe_unused]] constexpr Bitboard  OutpostRanks =
       (Us == WHITE ? Rank4BB | Rank5BB | Rank6BB : Rank5BB | Rank4BB | Rank3BB);
-    Bitboard b1 = pos.pieces(Us, Pt);
-    Bitboard b, bb;
-    Score    score = SCORE_ZERO;
+    Bitboard          b1 = pos.pieces(Us, Pt);
+    Bitboard          b, bb;
+    ScoreForClassical score = SCORE_ZERO;
 
     attackedBy[Us][Pt] = 0;
 
@@ -497,7 +497,7 @@ Score Evaluation<T>::pieces() {
 
 template<Tracing T>
 template<Color Us>
-Score Evaluation<T>::king() const {
+ScoreForClassical Evaluation<T>::king() const {
 
     constexpr Color    Them = ~Us;
     constexpr Bitboard Camp = (Us == WHITE ? AllSquares ^ Rank6BB ^ Rank7BB ^ Rank8BB
@@ -509,7 +509,7 @@ Score Evaluation<T>::king() const {
     const Square ksq        = pos.square<KING>(Us);
 
     // Init the score with king shelter and enemy pawns storm
-    Score score = pe->king_safety<Us>(pos);
+    ScoreForClassical score = pe->king_safety<Us>(pos);
 
     // Attacked squares defended at most once by our queen or king
     weak = attackedBy[Them][ALL_PIECES] & ~attackedBy2[Us]
@@ -597,14 +597,14 @@ Score Evaluation<T>::king() const {
 
 template<Tracing T>
 template<Color Us>
-Score Evaluation<T>::threats() const {
+ScoreForClassical Evaluation<T>::threats() const {
 
     constexpr Color     Them     = ~Us;
     constexpr Direction Up       = pawn_push(Us);
     constexpr Bitboard  TRank3BB = (Us == WHITE ? Rank3BB : Rank6BB);
 
-    Bitboard b, weak, defended, nonPawnEnemies, stronglyProtected, safe;
-    Score    score = SCORE_ZERO;
+    Bitboard          b, weak, defended, nonPawnEnemies, stronglyProtected, safe;
+    ScoreForClassical score = SCORE_ZERO;
 
     // Non-pawn enemies
     nonPawnEnemies = pos.pieces(Them) & ~pos.pieces(PAWN);
@@ -692,7 +692,7 @@ Score Evaluation<T>::threats() const {
 
 template<Tracing T>
 template<Color Us>
-Score Evaluation<T>::passed() const {
+ScoreForClassical Evaluation<T>::passed() const {
 
     constexpr Color     Them = ~Us;
     constexpr Direction Up   = pawn_push(Us);
@@ -702,8 +702,8 @@ Score Evaluation<T>::passed() const {
         return std::min(distance(pos.square<KING>(c), s), 5);
     };
 
-    Bitboard b, bb, squaresToQueen, unsafeSquares, blockedPassers, helpers;
-    Score    score = SCORE_ZERO;
+    Bitboard          b, bb, squaresToQueen, unsafeSquares, blockedPassers, helpers;
+    ScoreForClassical score = SCORE_ZERO;
 
     b = pe->passed_pawns(Us);
 
@@ -725,7 +725,7 @@ Score Evaluation<T>::passed() const {
 
         int r = relative_rank(Us, s);
 
-        Score bonus = PassedRank[r];
+        ScoreForClassical bonus = PassedRank[r];
 
         if (r > RANK_3)
         {
@@ -786,7 +786,7 @@ Score Evaluation<T>::passed() const {
 
 template<Tracing T>
 template<Color Us>
-Score Evaluation<T>::space() const {
+ScoreForClassical Evaluation<T>::space() const {
 
     // Early exit if, for example, both queens or 6 minor pieces have been exchanged
     if (pos.non_pawn_material() < SpaceThreshold)
@@ -807,9 +807,9 @@ Score Evaluation<T>::space() const {
 
     // Compute space score based on the number of safe squares and number of our pieces
     // increased with number of total blocked pawns in position.
-    int   bonus  = popcount(safe) + popcount(behind & safe & ~attackedBy[Them][ALL_PIECES]);
-    int   weight = pos.count<ALL_PIECES>(Us) - 3 + std::min(pe->blocked_count(), 9);
-    Score score  = make_score(bonus * weight * weight / 16, 0);
+    int bonus  = popcount(safe) + popcount(behind & safe & ~attackedBy[Them][ALL_PIECES]);
+    int weight = pos.count<ALL_PIECES>(Us) - 3 + std::min(pe->blocked_count(), 9);
+    ScoreForClassical score = make_score(bonus * weight * weight / 16, 0);
 
     if constexpr (T)
         Trace::add(SPACE, Us, score);
@@ -823,7 +823,7 @@ Score Evaluation<T>::space() const {
 // by interpolation from the midgame and endgame values.
 
 template<Tracing T>
-Value Evaluation<T>::winnable(Score score) const {
+Value Evaluation<T>::winnable(ScoreForClassical score) const {
 
     int outflanking = distance<File>(pos.square<KING>(WHITE), pos.square<KING>(BLACK))
                     + int(rank_of(pos.square<KING>(WHITE)) - rank_of(pos.square<KING>(BLACK)));
@@ -904,8 +904,8 @@ Value Evaluation<T>::winnable(Score score) const {
         sf -= 4 * !pawnsOnBothFlanks;
     }
 
-    Score w = make_score(mg, eg);
-    w       = apply_weights(w, WINNABLE_INDEX);
+    ScoreForClassical w = make_score(mg, eg);
+    w                   = apply_weights(w, WINNABLE_INDEX);
 
     mg = mg_value(w);
     eg = eg_value(w);
@@ -947,9 +947,9 @@ Value Evaluation<T>::value() {
 
     // Initialize score by reading the incrementally updated scores included in
     // the position object (material + piece square tables) and the material
-    // imbalance. Score is computed internally from the white point of view.
+    // imbalance. ScoreForClassical is computed internally from the white point of view.
     //from handicap mode begin
-    Score score =
+    ScoreForClassical score =
       apply_weights(pos.psq_score(), MATERIAL_INDEX)
       + (Alexander::Eval::imbalancesToEvaluate ? apply_weights(me->imbalance(), IMBALANCE_INDEX)
                                                : 0);

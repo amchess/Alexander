@@ -32,7 +32,7 @@ auto constexpr S = make_score;
 
 // 'Bonus' contains Piece-Square parameters.
 // Scores are explicit for files A to D, implicitly mirrored for E to H.
-constexpr Score Bonus[][RANK_NB][int(FILE_NB) / 2] = {
+constexpr ScoreForClassical Bonus[][RANK_NB][int(FILE_NB) / 2] = {
   {},
   {},
   {// Knight
@@ -81,7 +81,7 @@ constexpr Score Bonus[][RANK_NB][int(FILE_NB) / 2] = {
    {S(88, 47), S(120, 121), S(65, 116), S(33, 131)},
    {S(59, 11), S(89, 59), S(45, 73), S(-1, 78)}}};
 
-constexpr Score PBonus[RANK_NB][FILE_NB] = {  // Pawn (asymmetric distribution)
+constexpr ScoreForClassical PBonus[RANK_NB][FILE_NB] = {  // Pawn (asymmetric distribution)
   {},
   {S(2, -8), S(4, -6), S(11, 9), S(18, 5), S(16, 16), S(21, 6), S(9, -6), S(-3, -18)},
   {S(-9, -9), S(-15, -7), S(11, -10), S(15, 5), S(31, 2), S(23, 3), S(6, -8), S(-20, -5)},
@@ -95,7 +95,7 @@ constexpr Score PBonus[RANK_NB][FILE_NB] = {  // Pawn (asymmetric distribution)
 
 namespace PSQT {
 
-Score psq[PIECE_NB][SQUARE_NB];
+ScoreForClassical psq[PIECE_NB][SQUARE_NB];
 
 // PSQT::init() initializes piece-square tables: the white halves of the tables are
 // copied from Bonus[] and PBonus[], adding the piece value, then the black halves of
@@ -104,7 +104,7 @@ void init() {
 
     for (Piece pc : {W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING})
     {
-        Score score = make_score(PieceValueForPSQT[MG][pc], PieceValueForPSQT[EG][pc]);
+        ScoreForClassical score = make_score(PieceValueForPSQT[MG][pc], PieceValueForPSQT[EG][pc]);
 
         for (Square s = SQ_A1; s <= SQ_H8; ++s)
         {

@@ -31,8 +31,8 @@ namespace {
 
 // Polynomial material imbalance parameters
 
-// One Score parameter for each pair (our piece, another of our pieces)
-constexpr Score QuadraticOurs[][PIECE_TYPE_NB] = {
+// One ScoreForClassical parameter for each pair (our piece, another of our pieces)
+constexpr ScoreForClassical QuadraticOurs[][PIECE_TYPE_NB] = {
   // OUR PIECE 2
   // bishop pair    pawn         knight       bishop       rook           queen
   {S(1419, 1455)},                                                  // Bishop pair
@@ -43,8 +43,8 @@ constexpr Score QuadraticOurs[][PIECE_TYPE_NB] = {
   {S(-210, -211), S(37, 14), S(147, 141), S(161, 105), S(-158, -174), S(-9, -31)}  // Queen
 };
 
-// One Score parameter for each pair (our piece, their piece)
-constexpr Score QuadraticTheirs[][PIECE_TYPE_NB] = {
+// One ScoreForClassical parameter for each pair (our piece, their piece)
+constexpr ScoreForClassical QuadraticTheirs[][PIECE_TYPE_NB] = {
   // THEIR PIECE
   // bishop pair   pawn         knight       bishop       rook         queen
   {},                                                              // Bishop pair
@@ -85,11 +85,11 @@ bool is_KQKRPs(const Position& pos, Color us) {
 /// piece type for both colors.
 
 template<Color Us>
-Score imbalance(const int pieceCount[][PIECE_TYPE_NB]) {
+ScoreForClassical imbalance(const int pieceCount[][PIECE_TYPE_NB]) {
 
     constexpr Color Them = ~Us;
 
-    Score bonus = SCORE_ZERO;
+    ScoreForClassical bonus = SCORE_ZERO;
 
     // Second-degree polynomial material imbalance, by Tord Romstad
     for (int pt1 = NO_PIECE_TYPE; pt1 <= QUEEN; ++pt1)

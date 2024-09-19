@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -17,37 +17,40 @@
 */
 
 #include <iostream>
+//for classical begin
 #include <unordered_map>
-
-#include "bitboard.h"
 #include "evaluate.h"
 #include "endgame.h"
+#include "psqt.h"
+//for classical end
+#include "bitboard.h"
 #include "misc.h"
 #include "position.h"
-#include "psqt.h"
-#include "tune.h"
-#include "types.h"
 #include "uci.h"
+#include "tune.h"
+#include "win_probability.h"
 #include "learn/learn.h"  //learning
 using namespace Alexander;
 
 int main(int argc, char* argv[]) {
-
     std::cout << engine_info() << std::endl;
-    UCI uci(argc, argv);   //Khalid
-    LD.init(uci.options);  //Kelly
+
+    WDLModel::init();
+
     Bitboards::init();
     Position::init();
-    Tune::init(uci.options);
 
-    Eval::initHandicapMode(uci.options);
+    UCIEngine uci(argc, argv);
+    LD.init(uci.engine_options());  //Kelly
+    Tune::init(uci.engine_options());
+    //for classical begin
+    Eval::initHandicapMode(uci.engine_options());
     Bitbases::init();
-    Eval::loadAvatar(uci.options["Avatar File"]);  //handicap mode
-
+    Eval::loadAvatar(uci.engine_options()["Avatar File"]);  //handicap mode
     PSQT::init();
     Bitbases::init();
     Endgames::init();
-
+    //for classical end
     uci.loop();
 
     return 0;

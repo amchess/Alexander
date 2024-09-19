@@ -31,15 +31,15 @@ namespace Alexander::Pawns {
 
 struct Entry {
 
-    Score    pawn_score(Color c) const { return scores[c]; }
-    Bitboard pawn_attacks(Color c) const { return pawnAttacks[c]; }
-    Bitboard passed_pawns(Color c) const { return passedPawns[c]; }
-    Bitboard pawn_attacks_span(Color c) const { return pawnAttacksSpan[c]; }
-    int      passed_count() const { return popcount(passedPawns[WHITE] | passedPawns[BLACK]); }
-    int      blocked_count() const { return blockedCount; }
+    ScoreForClassical pawn_score(Color c) const { return scores[c]; }
+    Bitboard          pawn_attacks(Color c) const { return pawnAttacks[c]; }
+    Bitboard          passed_pawns(Color c) const { return passedPawns[c]; }
+    Bitboard          pawn_attacks_span(Color c) const { return pawnAttacksSpan[c]; }
+    int passed_count() const { return popcount(passedPawns[WHITE] | passedPawns[BLACK]); }
+    int blocked_count() const { return blockedCount; }
 
     template<Color Us>
-    Score king_safety(const Position& pos) {
+    ScoreForClassical king_safety(const Position& pos) {
         return kingSquares[Us] == pos.square<KING>(Us)
                 && castlingRights[Us] == pos.castling_rights(Us)
                ? kingSafety[Us]
@@ -47,20 +47,20 @@ struct Entry {
     }
 
     template<Color Us>
-    Score do_king_safety(const Position& pos);
+    ScoreForClassical do_king_safety(const Position& pos);
 
     template<Color Us>
-    Score evaluate_shelter(const Position& pos, Square ksq) const;
+    ScoreForClassical evaluate_shelter(const Position& pos, Square ksq) const;
 
-    Key      key;
-    Score    scores[COLOR_NB];
-    Bitboard passedPawns[COLOR_NB];
-    Bitboard pawnAttacks[COLOR_NB];
-    Bitboard pawnAttacksSpan[COLOR_NB];
-    Square   kingSquares[COLOR_NB];
-    Score    kingSafety[COLOR_NB];
-    int      castlingRights[COLOR_NB];
-    int      blockedCount;
+    Key               key;
+    ScoreForClassical scores[COLOR_NB];
+    Bitboard          passedPawns[COLOR_NB];
+    Bitboard          pawnAttacks[COLOR_NB];
+    Bitboard          pawnAttacksSpan[COLOR_NB];
+    Square            kingSquares[COLOR_NB];
+    ScoreForClassical kingSafety[COLOR_NB];
+    int               castlingRights[COLOR_NB];
+    int               blockedCount;
 };
 
 using Table = HashTable<Entry, 131072>;

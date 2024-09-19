@@ -20,18 +20,18 @@
 #define EVALUATE_H_INCLUDED
 
 #include <string>
-#include <unordered_map>
+#include <unordered_map>  //for classical
 
 #include "types.h"
 
 namespace Alexander {
 
 class Position;
-class OptionsMap;
+class OptionsMap;  //for classical
 
 namespace Eval {
 
-std::string trace(Position& pos);
+std::string trace(Position& pos);  //for classical
 
 //true handicap mode begin
 extern bool limitStrength, pawnsToEvaluate, winnableToEvaluate, imbalancesToEvaluate,

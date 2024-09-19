@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -77,14 +77,15 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
        << std::setw(16) << pos.key() << std::setfill(' ') << std::dec << "\nCheckers: ";
 
     for (Bitboard b = pos.checkers(); b;)
-        os << UCI::square(pop_lsb(b)) << " ";
+        os << UCIEngine::square(pop_lsb(b)) << " ";
 
     if (int(Tablebases::MaxCardinality) >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING))
     {
         StateInfo st;
+        //for classical
 
         Position p;
-        p.set(pos.fen(), pos.is_chess960(), &st, pos.this_thread());
+        p.set(pos.fen(), pos.is_chess960(), &st, pos.this_thread());  //for classical
         Tablebases::ProbeState s1, s2;
         Tablebases::WDLScore   wdl = Tablebases::probe_wdl(p, &s1);
         int                    dtz = Tablebases::probe_dtz(p, &s2);
@@ -937,7 +938,8 @@ void Position::init() {
 // Initializes the position object with the given FEN string.
 // This function is not very robust - make sure that input FENs are correct,
 // this is assumed to be the responsibility of the GUI.
-Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Thread* th) {
+Position&
+Position::set(const string& fenStr, bool isChess960, StateInfo* si, Thread* th) {  //for classical
     /*
    A FEN string defines a particular position using only the ASCII character set.
 
@@ -1063,12 +1065,16 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
     // handle also common incorrect FEN with fullmove = 0.
     gamePly = std::max(2 * (gamePly - 1), 0) + (sideToMove == BLACK);
 
-    chess960   = isChess960;
-    thisThread = th;
+    chess960 = isChess960;
+    //for classical begin
+    if (th != nullptr)
+    {
+        thisThread = th;
+    }
+    //for classical end
     set_state();
 
     assert(pos_is_ok());
-
     return *this;
 }
 
@@ -1113,7 +1119,6 @@ void Position::set_check_info() const {
 // data that once computed is updated incrementally as moves are made.
 // The function is only used when a new position is set up
 void Position::set_state() const {
-
     st->key = st->materialKey  = 0;
     st->pawnKey                = Zobrist::noPawns;
     st->nonPawnMaterial[WHITE] = st->nonPawnMaterial[BLACK] = VALUE_ZERO;
@@ -1165,7 +1170,7 @@ Position& Position::set(const string& code, Color c, StateInfo* si) {
     string fenStr = "8/" + sides[0] + char(8 - sides[0].length() + '0') + "/8/8/8/8/" + sides[1]
                   + char(8 - sides[1].length() + '0') + "/8 w - - 0 10";
 
-    return set(fenStr, false, si, nullptr);
+    return set(fenStr, false, si, nullptr);  //for classical
 }
 
 
@@ -1211,11 +1216,12 @@ string Position::fen() const {
     if (!can_castle(ANY_CASTLING))
         ss << '-';
 
-    ss << (ep_square() == SQ_NONE ? " - " : " " + UCI::square(ep_square()) + " ") << st->rule50
-       << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+    ss << (ep_square() == SQ_NONE ? " - " : " " + UCIEngine::square(ep_square()) + " ")
+       << st->rule50 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
 
     return ss.str();
 }
+//for classical begin
 /// Position::slider_blockers() returns a bitboard of all the pieces (both colors)
 /// that are blocking attacks on the square 's' from 'sliders'. A piece blocks a
 /// slider if removing that piece from the board would result in a position where
@@ -1248,6 +1254,7 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
     }
     return blockers;
 }
+//for classical end
 // Calculates st->blockersForKing[c] and st->pinners[~c],
 // which store respectively the pieces preventing king of color c from being in check
 // and the slider pieces of color ~c pinning pieces of color c to the king.
@@ -1475,7 +1482,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
     assert(m.is_ok());
     assert(&newSt != st);
 
-    thisThread->nodes.fetch_add(1, std::memory_order_relaxed);
+    thisThread->nodes.fetch_add(1, std::memory_order_relaxed);  //for classical
     Key k = st->key ^ Zobrist::side;
 
     // Copy some fields of the old state to our new StateInfo object except the
@@ -1538,13 +1545,14 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
         else
             st->nonPawnMaterial[them] -= PieceValue[captured];
 
+        //for classical
         // Update board and piece lists
         remove_piece(capsq);
 
-        // Update material hash key and prefetch access to materialTable
-        prefetch(thisThread->materialTable[st->materialKey]);
+        prefetch(thisThread->materialTable[st->materialKey]);  //for classical
         k ^= Zobrist::psq[captured][capsq];
         st->materialKey ^= Zobrist::psq[captured][pieceCount[captured]];
+
         // Reset rule 50 counter
         st->rule50 = 0;
     }
@@ -1570,6 +1578,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
     // Move the piece. The tricky Chess960 castling is handled earlier
     if (m.type_of() != CASTLING)
     {
+        //for classical
         move_piece(from, to);
     }
 
@@ -1594,6 +1603,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             remove_piece(to);
             put_piece(promotion, to);
 
+            //for classical
             // Update hash keys
             k ^= Zobrist::psq[pc][to] ^ Zobrist::psq[promotion][to];
             st->pawnKey ^= Zobrist::psq[pc][to];
@@ -1720,6 +1730,7 @@ void Position::do_castling(Color us, Square from, Square& to, Square& rfrom, Squ
     rfrom         = to;  // Castling is encoded as "king captures friendly rook"
     rto           = relative_square(us, kingSide ? SQ_F1 : SQ_D1);
     to            = relative_square(us, kingSide ? SQ_G1 : SQ_C1);
+    //for classical
     // Remove both pieces first since squares could overlap in Chess960
     remove_piece(Do ? from : to);
     remove_piece(Do ? rfrom : rto);
@@ -1737,11 +1748,12 @@ void Position::do_null_move(StateInfo& newSt, TranspositionTable& tt) {
     assert(!checkers());
     assert(&newSt != st);
 
-    std::memcpy(&newSt, st, sizeof(StateInfo));
+    std::memcpy(&newSt, st, sizeof(StateInfo));  //for classical
 
     newSt.previous = st;
     st             = &newSt;
 
+    //for classical
 
     if (st->epSquare != SQ_NONE)
     {
@@ -1965,9 +1977,9 @@ bool Position::king_danger(Color c) const {
 }
 //from Crystal end
 
-// Tests if the position has a move which draws by repetition,
-// or an earlier position has a move that directly reaches the current position.
-bool Position::has_game_cycle(int ply) const {
+// Tests if the position has a move which draws by repetition.
+// This function accurately matches the outcome of is_draw() over all legal moves.
+bool Position::upcoming_repetition(int ply) const {
 
     int j;
 
@@ -1978,10 +1990,16 @@ bool Position::has_game_cycle(int ply) const {
 
     Key        originalKey = st->key;
     StateInfo* stp         = st->previous;
+    Key        other       = originalKey ^ stp->key ^ Zobrist::side;
 
     for (int i = 3; i <= end; i += 2)
     {
-        stp = stp->previous->previous;
+        stp = stp->previous;
+        other ^= stp->key ^ stp->previous->key ^ Zobrist::side;
+        stp = stp->previous;
+
+        if (other != 0)
+            continue;
 
         Key moveKey = originalKey ^ stp->key;
         if ((j = H1(moveKey), cuckoo[j] == moveKey) || (j = H2(moveKey), cuckoo[j] == moveKey))
@@ -1997,12 +2015,6 @@ bool Position::has_game_cycle(int ply) const {
 
                 // For nodes before or at the root, check that the move is a
                 // repetition rather than a move to the current position.
-                // In the cuckoo table, both moves Rc1c5 and Rc5c1 are stored in
-                // the same location, so we have to select which square to check.
-                if (color_of(piece_on(empty(s1) ? s2 : s1)) != side_to_move())
-                    continue;
-
-                // For repetitions before or at the root, require one more
                 if (stp->repetition)
                     return true;
             }
@@ -2040,7 +2052,7 @@ void Position::flip() {
     std::getline(ss, token);  // Half and full moves
     f += token;
 
-    set(f, is_chess960(), st, this_thread());
+    set(f, is_chess960(), st, this_thread());  //for classical
 
     assert(pos_is_ok());
 }
