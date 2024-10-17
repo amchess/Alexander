@@ -1,4 +1,4 @@
 make profile-build ARCH=native COMP=gcc
 strip alexander
-mv alexander Alexander2.0-native
+mv alexander AlexanderSantiago-native
 make clean

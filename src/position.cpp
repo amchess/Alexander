@@ -1119,8 +1119,11 @@ void Position::set_check_info() const {
 // data that once computed is updated incrementally as moves are made.
 // The function is only used when a new position is set up
 void Position::set_state() const {
-    st->key = st->materialKey  = 0;
-    st->pawnKey                = Zobrist::noPawns;
+
+    st->key = st->materialKey = 0;
+    st->majorPieceKey = st->minorPieceKey = 0;
+    st->nonPawnKey[WHITE] = st->nonPawnKey[BLACK] = 0;
+    st->pawnKey                                   = Zobrist::noPawns;
     st->nonPawnMaterial[WHITE] = st->nonPawnMaterial[BLACK] = VALUE_ZERO;
     st->checkersBB = attackers_to(square<KING>(sideToMove)) & pieces(~sideToMove);
 
@@ -1135,8 +1138,27 @@ void Position::set_state() const {
         if (type_of(pc) == PAWN)
             st->pawnKey ^= Zobrist::psq[pc][s];
 
-        else if (type_of(pc) != KING)
-            st->nonPawnMaterial[color_of(pc)] += PieceValue[pc];
+        else
+        {
+            st->nonPawnKey[color_of(pc)] ^= Zobrist::psq[pc][s];
+
+            if (type_of(pc) != KING)
+            {
+                st->nonPawnMaterial[color_of(pc)] += PieceValue[pc];
+
+                if (type_of(pc) == QUEEN || type_of(pc) == ROOK)
+                    st->majorPieceKey ^= Zobrist::psq[pc][s];
+
+                else
+                    st->minorPieceKey ^= Zobrist::psq[pc][s];
+            }
+
+            else
+            {
+                st->majorPieceKey ^= Zobrist::psq[pc][s];
+                st->minorPieceKey ^= Zobrist::psq[pc][s];
+            }
+        }
     }
 
     if (st->epSquare != SQ_NONE)
@@ -1490,6 +1512,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
     // our state pointer to point to the new (ready to be updated) state.
     std::memcpy(&newSt, st, offsetof(StateInfo, key));
     newSt.previous = st;
+    st->next       = &newSt;
     st             = &newSt;
 
     // Increment ply counters. In particular, rule50 will be reset to zero later on
@@ -1518,6 +1541,8 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
         do_castling<true>(us, from, to, rfrom, rto);
 
         k ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
+        st->majorPieceKey ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
+        st->nonPawnKey[us] ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
         captured = NO_PIECE;
     }
 
@@ -1543,7 +1568,16 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             st->pawnKey ^= Zobrist::psq[captured][capsq];
         }
         else
+        {
             st->nonPawnMaterial[them] -= PieceValue[captured];
+            st->nonPawnKey[them] ^= Zobrist::psq[captured][capsq];
+
+            if (type_of(captured) == QUEEN || type_of(captured) == ROOK)
+                st->majorPieceKey ^= Zobrist::psq[captured][capsq];
+
+            else
+                st->minorPieceKey ^= Zobrist::psq[captured][capsq];
+        }
 
         //for classical
         // Update board and piece lists
@@ -1595,7 +1629,8 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
         else if (m.type_of() == PROMOTION)
         {
-            Piece promotion = make_piece(us, m.promotion_type());
+            Piece     promotion     = make_piece(us, m.promotion_type());
+            PieceType promotionType = type_of(promotion);
 
             assert(relative_rank(us, to) == RANK_8);
             assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
@@ -1610,6 +1645,12 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             st->materialKey ^=
               Zobrist::psq[promotion][pieceCount[promotion] - 1] ^ Zobrist::psq[pc][pieceCount[pc]];
 
+            if (promotionType == QUEEN || promotionType == ROOK)
+                st->majorPieceKey ^= Zobrist::psq[promotion][to];
+
+            else
+                st->minorPieceKey ^= Zobrist::psq[promotion][to];
+
             // Update material
             st->nonPawnMaterial[us] += PieceValue[promotion];
         }
@@ -1619,6 +1660,23 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
         // Reset rule 50 draw counter
         st->rule50 = 0;
+    }
+
+    else
+    {
+        st->nonPawnKey[us] ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+
+        if (type_of(pc) == KING)
+        {
+            st->majorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+            st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+        }
+
+        else if (type_of(pc) == QUEEN || type_of(pc) == ROOK)
+            st->majorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+
+        else
+            st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
     }
 
     // Set capture piece
@@ -1751,6 +1809,7 @@ void Position::do_null_move(StateInfo& newSt, TranspositionTable& tt) {
     std::memcpy(&newSt, st, sizeof(StateInfo));  //for classical
 
     newSt.previous = st;
+    st->next       = &newSt;
     st             = &newSt;
 
     //for classical

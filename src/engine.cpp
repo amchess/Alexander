@@ -47,9 +47,9 @@ namespace Alexander {
 constexpr auto StartFEN  = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 constexpr int  MaxHashMB = Is64Bit ? 33554432 : 2048;
 
-Engine::Engine(std::string path) :
-    binaryDirectory(
-      CommandLine::get_binary_directory(path, CommandLine::get_working_directory())),  //from Khalid
+Engine::Engine(std::optional<std::string> path) :
+    binaryDirectory(CommandLine::get_binary_directory(
+      path.value_or(""), CommandLine::get_working_directory())),  //from Khalid
     numaContext(NumaConfig::from_system()),
     states(new std::deque<StateInfo>(1)),
     threads() {
@@ -63,12 +63,13 @@ Engine::Engine(std::string path) :
 
     options["NumaPolicy"] << Option("auto", [this](const Option& o) {
         set_numa_config_from_option(o);
-        return numa_config_information_as_string() + "\n" + thread_binding_information_as_string();
+        return numa_config_information_as_string() + "\n"
+             + thread_allocation_information_as_string();
     });
 
     options["Threads"] << Option(1, 1, 1024, [this](const Option&) {
         resize_threads();
-        return thread_binding_information_as_string();
+        return thread_allocation_information_as_string();
     });
 
     options["Hash"] << Option(16, 1, MaxHashMB, [this](const Option& o) {
@@ -167,6 +168,7 @@ Engine::Engine(std::string path) :
         return std::nullopt;
     });
     options["Experience Book Max Moves"] << Option(100, 1, 100);
+    options["Experience Book Min Depth"] << Option(4, 1, 255);
     //From Kelly end
     //From MCTS begin
     options["MCTS"] << Option(false);
@@ -179,6 +181,10 @@ Engine::Engine(std::string path) :
     options["LiveBook Proxy Url"] << Option("", [](const Option& o) -> std::optional<std::string> {
         Search::set_proxy_url(o);
         return std::optional<std::string>{};
+    });
+    options["LiveBook Proxy Diversity"] << Option(false, [](const Option& o) {
+        Search::set_proxy_diversity(o);
+        return std::nullopt;
     });
     options["LiveBook Lichess Games"] << Option(false, [](const Option& o) {
         Search::set_use_lichess_games(o);
@@ -384,6 +390,8 @@ std::string Engine::visualize() const {
     return ss.str();
 }
 
+int Engine::get_hashfull(int maxAge) const { return tt.hashfull(maxAge); }
+
 std::vector<std::pair<size_t, size_t>> Engine::get_bound_thread_count_by_numa_node() const {
     auto                                   counts = threads.get_bound_thread_count_by_numa_node();
     const NumaConfig&                      cfg    = numaContext.get_numa_config();
@@ -409,14 +417,8 @@ std::string Engine::numa_config_information_as_string() const {
 std::string Engine::thread_binding_information_as_string() const {
     auto              boundThreadsByNode = get_bound_thread_count_by_numa_node();
     std::stringstream ss;
-
-    size_t threadsSize = threads.size();
-    ss << "Using " << threadsSize << (threadsSize > 1 ? " threads" : " thread");
-
     if (boundThreadsByNode.empty())
         return ss.str();
-
-    ss << " with NUMA node thread binding: ";
 
     bool isFirst = true;
 
@@ -427,6 +429,22 @@ std::string Engine::thread_binding_information_as_string() const {
         ss << current << "/" << total;
         isFirst = false;
     }
+
+    return ss.str();
+}
+
+std::string Engine::thread_allocation_information_as_string() const {
+    std::stringstream ss;
+
+    size_t threadsSize = threads.size();
+    ss << "Using " << threadsSize << (threadsSize > 1 ? " threads" : " thread");
+
+    auto boundThreadsByNodeStr = thread_binding_information_as_string();
+    if (boundThreadsByNodeStr.empty())
+        return ss.str();
+
+    ss << " with NUMA node thread binding: ";
+    ss << boundThreadsByNodeStr;
 
     return ss.str();
 }

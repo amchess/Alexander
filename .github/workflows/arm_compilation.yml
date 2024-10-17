@@ -55,9 +55,6 @@ jobs:
           done
           [[ -n "$benchref" ]] && echo "benchref=$benchref" >> $GITHUB_ENV && echo "From commit: $hash" && echo "Reference bench: $benchref" || echo "No bench found"
 
-      - name: Download the used network from the fishtest framework
-        run: make net
-
       - name: Check compiler
         run: |
           if [ $COMP == ndk ]; then

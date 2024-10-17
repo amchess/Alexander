@@ -1,6 +1,0 @@
-Different profiles:
-profile-build -> Alexander
-
-For MinGW build, use 7.3.0 and experimental/filesystem (not simple filesystem)
-Add CBlas as Curl:
-lib and includes

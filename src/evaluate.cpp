@@ -143,7 +143,7 @@ struct Weight {
                         {"Imbalance(mg)", "Imbalance(eg)", 100, 100},
                         {"PawnStructure(mg)", "PawnStructure(eg)", 100, 100},
                         {"Knight(mg)", "Knight(eg)", 100, 100},
-                        {"Bishop(mg)", "Bishop(mg)", 100, 100},
+                        {"Bishop(mg)", "Bishop(eg)", 100, 100},
                         {"Rook(mg)", "Rook(eg)", 100, 100},
                         {"Queen(mg)", "Queen(eg)", 100, 100},
                         {"Mobility(mg)", "Mobility(eg)", 100, 100},

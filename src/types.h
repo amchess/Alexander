@@ -39,7 +39,7 @@
     #include <cassert>
     #include <cstdint>
     #include <cstddef>
-    
+
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
         #pragma warning(disable: 4127)  // Conditional expression is constant

@@ -154,18 +154,6 @@ endif ()
 # Installation
 install(TARGETS ${EXE} DESTINATION ${BINDIR})
 
-# Download nnue networks
-set(NNUE_NET "nn-b1a57edbea57.nnue")
-add_custom_command(
-        OUTPUT ${NNUE_NET}
-        COMMAND ${CMAKE_COMMAND} -E echo "Downloading ${NNUE_NET}..."
-        COMMAND ${CMAKE_COMMAND} -E download
-        "https://tests.stockfishchess.org/api/nn/${NNUE_NET}"
-        "${CMAKE_BINARY_DIR}/${NNUE_NET}"
-        COMMAND ${CMAKE_COMMAND} -E echo "Download completed: ${NNUE_NET}"
-        VERBATIM
-)
-
 add_custom_target(net ALL
         DEPENDS ${NNUE_NET}
 )
