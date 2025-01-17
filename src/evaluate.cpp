@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -75,31 +75,11 @@ enum Term {  // The first 8 entries are reserved for PieceType
 
 ScoreForClassical scores[TERM_NB][COLOR_NB];
 
-static double to_cp(Value v) { return double(v) / NormalizeToPawnValue; }  //from classical eval
-
 static void add(int idx, Color c, ScoreForClassical s) { scores[idx][c] = s; }
 
 static void add(int idx, ScoreForClassical w, ScoreForClassical b = SCORE_ZERO) {
     scores[idx][WHITE] = w;
     scores[idx][BLACK] = b;
-}
-
-static std::ostream& operator<<(std::ostream& os, ScoreForClassical s) {
-    os << std::setw(5) << to_cp(mg_value(s)) << " " << std::setw(5) << to_cp(eg_value(s));
-    return os;
-}
-
-static std::ostream& operator<<(std::ostream& os, Term t) {
-
-    if (t == MATERIAL || t == IMBALANCE || t == WINNABLE || t == TOTAL)
-        os << " ----  ----"
-           << " | "
-           << " ----  ----";
-    else
-        os << scores[t][WHITE] << " | " << scores[t][BLACK];
-
-    os << " | " << scores[t][WHITE] - scores[t][BLACK] << " |\n";
-    return os;
 }
 }
 using namespace Trace;
@@ -1056,10 +1036,25 @@ Value Eval::evaluate(const Position& pos) {
     return v;
 }
 
+#include <string>
+#include <sstream>
+#include <iomanip>
+
+// Helper function to format a table row
+static void append_term_row(std::stringstream& ss, const char* term_name, int term, const Position& pos) {
+    ss << " " << std::setw(12) << term_name << " | "
+       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][WHITE]), pos) << " "
+       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE]), pos) << " | "
+       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][BLACK]), pos) << " "
+       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][BLACK]), pos) << " | "
+       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " "
+       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " |\n";
+}
 // Like evaluate(), but instead of returning a value, it returns
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
+
 std::string Eval::trace(Position& pos) {
 
     if (pos.checkers())
@@ -1067,32 +1062,42 @@ std::string Eval::trace(Position& pos) {
 
     std::memset(scores, 0, sizeof(scores));
 
-    // Reset any global variable used in eval
     pos.this_thread()->bestValue = VALUE_ZERO;
 
     Value v = Evaluation<TRACE>(pos).value();
 
-    v = pos.side_to_move() == WHITE ? v : -v;  // Trace scores are from white's point of view
+    v = pos.side_to_move() == WHITE ? v : -v;
 
     std::stringstream ss;
+
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2)
        << "     Term    |    White    |    Black    |    Total   \n"
        << "             |   MG    EG  |   MG    EG  |   MG    EG \n"
-       << " ------------+-------------+-------------+------------\n"
-       << "    Material | " << Term(MATERIAL) << "   Imbalance | " << Term(IMBALANCE)
-       << "       Pawns | " << Term(PAWN) << "     Knights | " << Term(KNIGHT) << "     Bishops | "
-       << Term(BISHOP) << "       Rooks | " << Term(ROOK) << "      Queens | " << Term(QUEEN)
-       << "    Mobility | " << Term(MOBILITY) << " King safety | " << Term(KING)
-       << "     Threats | " << Term(THREAT) << "      Passed | " << Term(PASSED)
-       << "       Space | " << Term(SPACE) << "    Winnable | " << Term(WINNABLE)
-       << " ------------+-------------+-------------+------------\n"
-       << "       Total | " << Term(TOTAL);
+       << " ------------+-------------+-------------+------------\n";
 
-    ss << "\nFinal evaluation: " << to_cp(v) << " (white side)\n";
+    append_term_row(ss, "Material", MATERIAL, pos);
+    append_term_row(ss, "Imbalance", IMBALANCE, pos);
+    append_term_row(ss, "Pawns", PAWN, pos);
+    append_term_row(ss, "Knights", KNIGHT, pos);
+    append_term_row(ss, "Bishops", BISHOP, pos);
+    append_term_row(ss, "Rooks", ROOK, pos);
+    append_term_row(ss, "Queens", QUEEN, pos);
+    append_term_row(ss, "Mobility", MOBILITY, pos);
+    append_term_row(ss, "King safety", KING, pos);
+    append_term_row(ss, "Threats", THREAT, pos);
+    append_term_row(ss, "Passed", PASSED, pos);
+    append_term_row(ss, "Space", SPACE, pos);
+    append_term_row(ss, "Winnable", WINNABLE, pos);
 
+    ss << " ------------+-------------+-------------+------------\n";
+
+    append_term_row(ss, "Total", TOTAL, pos);
+
+    ss << "\nFinal evaluation: " << UCIEngine::to_cp(v, pos) << " (white side)\n";
 
     return ss.str();
 }
+
 //handicap mode begin
 namespace Eval {
 

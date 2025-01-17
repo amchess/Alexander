@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -38,7 +38,6 @@
 
     #include <cassert>
     #include <cstdint>
-    #include <cstddef>
 
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
@@ -94,13 +93,13 @@ constexpr bool HasPopCnt = false;
     #ifdef USE_PEXT
 constexpr bool HasPext = true;
     #else
-constexpr bool HasPext = false;
+constexpr bool HasPext   = false;
     #endif
 
     #ifdef IS_64BIT
 constexpr bool Is64Bit = true;
     #else
-constexpr bool Is64Bit = false;
+constexpr bool Is64Bit   = false;
     #endif
 
 using Key      = uint64_t;
@@ -118,7 +117,8 @@ enum Color {
 constexpr Color Colors[2] = {WHITE, BLACK};
 
 enum CastlingRights {
-    WHITE_OO  = 1,
+    NO_CASTLING,
+    WHITE_OO,
     WHITE_OOO = WHITE_OO << 1,
     BLACK_OO  = WHITE_OO << 2,
     BLACK_OOO = WHITE_OO << 3,
@@ -174,6 +174,21 @@ constexpr Value VALUE_TB                 = VALUE_MATE_IN_MAX_PLY - 1;
 constexpr Value VALUE_TB_WIN_IN_MAX_PLY  = VALUE_TB - MAX_PLY;
 constexpr Value VALUE_TB_LOSS_IN_MAX_PLY = -VALUE_TB_WIN_IN_MAX_PLY;
 
+
+constexpr bool is_valid(Value value) { return value != VALUE_NONE; }
+
+constexpr bool is_win(Value value) {
+    assert(is_valid(value));
+    return value >= VALUE_TB_WIN_IN_MAX_PLY;
+}
+
+constexpr bool is_loss(Value value) {
+    assert(is_valid(value));
+    return value <= VALUE_TB_LOSS_IN_MAX_PLY;
+}
+
+constexpr bool is_decisive(Value value) { return is_win(value) || is_loss(value); }
+
 // In the code, we make the assumption that these values
 // are such that non_pawn_material() can be used to uniquely
 // identify the material on the board.
@@ -197,7 +212,6 @@ constexpr Value MidgameLimit  = 15258;
 constexpr Value EndgameLimit  = 3915;
 //from classical eval end
 constexpr Value RandomValue          = 1200;  //handicap mode Michael Byrne
-constexpr int   NormalizeToPawnValue = 356;   //from mcts
 //from Crystal begin
 constexpr Value PawnConversionFactor = 356;
 constexpr Value VALUE_TB_WIN         = 51 * PawnConversionFactor;
@@ -303,39 +317,6 @@ enum Rank : int {
     RANK_NB
 };
 
-// Shashin section
-// Positions-algorithms types
-enum {
-    SHASHIN_POSITION_TAL_CAPABLANCA_PETROSIAN = 7,
-    SHASHIN_POSITION_HIGH_PETROSIAN           = -6,
-    SHASHIN_POSITION_MIDDLE_HIGH_PETROSIAN    = -5,
-    SHASHIN_POSITION_MIDDLE_PETROSIAN         = -4,
-    SHASHIN_POSITION_MIDDLE_LOW_PETROSIAN     = -3,
-    SHASHIN_POSITION_LOW_PETROSIAN            = -2,
-    SHASHIN_POSITION_CAPABLANCA_PETROSIAN     = -1,
-    SHASHIN_POSITION_CAPABLANCA               = 0,
-    SHASHIN_POSITION_CAPABLANCA_TAL           = 1,
-    SHASHIN_POSITION_LOW_TAL                  = 2,
-    SHASHIN_POSITION_MIDDLE_LOW_TAL           = 3,
-    SHASHIN_POSITION_MIDDLE_TAL               = 4,
-    SHASHIN_POSITION_MIDDLE_HIGH_TAL          = 5,
-    SHASHIN_POSITION_HIGH_TAL                 = 6
-};
-enum {
-    SHASHIN_LOW_TAL_THRESHOLD               = 76,
-    SHASHIN_MIDDLE_LOW_TAL_THRESHOLD        = 81,
-    SHASHIN_MIDDLE_TAL_THRESHOLD            = 88,
-    SHASHIN_MIDDLE_HIGH_TAL_THRESHOLD       = 91,
-    SHASHIN_HIGH_TAL_THRESHOLD              = 96,
-    SHASHIN_CAPABLANCA_THRESHOLD            = 51,
-    SHASHIN_LOW_PETROSIAN_THRESHOLD         = 100 - SHASHIN_LOW_TAL_THRESHOLD,
-    SHASHIN_MIDDLE_LOW_PETROSIAN_THRESHOLD  = 100 - SHASHIN_MIDDLE_LOW_TAL_THRESHOLD,
-    SHASHIN_MIDDLE_PETROSIAN_THRESHOLD      = 100 - SHASHIN_MIDDLE_TAL_THRESHOLD,
-    SHASHIN_MIDDLE_HIGH_PETROSIAN_THRESHOLD = 100 - SHASHIN_MIDDLE_HIGH_TAL_THRESHOLD,
-    SHASHIN_HIGH_PETROSIAN_THRESHOLD        = 100 - SHASHIN_HIGH_TAL_THRESHOLD,
-};
-
-// End Shashin section
 //for classical begin
 /// ScoreForClassical enum stores a middlegame and an endgame value in a single integer (enum).
 /// The least significant 16 bits are used to store the middlegame value and the
@@ -550,7 +531,7 @@ class Move {
     constexpr std::uint16_t raw() const { return data; }
 
     struct MoveHash {
-        size_t operator()(const Move& m) const { return make_key(m.data); }
+        std::size_t operator()(const Move& m) const { return make_key(m.data); }
     };
 
    protected:

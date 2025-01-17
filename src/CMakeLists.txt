@@ -24,9 +24,9 @@ set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cp
         livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp
         livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp
         livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp
-        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp)
+        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp) shashin/shashin_manager.cpp
 
-set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h pawns.h
+set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h history.h pawns.h
         position.h
         psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h
         tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h
@@ -36,7 +36,7 @@ set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movege
         livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h
         livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h
         livebook/LichessGames.h livebook/ChessDBContributor.h
-        livebook/json/json.hpp)
+        livebook/json/json.hpp) shashin/shashin_manager.h
 
 
 # Set default values for options

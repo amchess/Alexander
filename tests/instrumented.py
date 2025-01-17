@@ -187,6 +187,19 @@ class TestCLI(metaclass=OrderedClassMembers):
                 network = line.split(" ")[-1]
                 break
 
+        # find network file in src dir
+        network = os.path.join(PATH.parent.resolve(), "src", network)
+
+        if not os.path.exists(network):
+            print(
+                f"Network file {network} not found, please download the network file over the make command."
+            )
+            assert False
+
+        diff = subprocess.run(["diff", network, f"verify.nnue"])
+
+        assert diff.returncode == 0
+
 
 class TestInteractive(metaclass=OrderedClassMembers):
     def beforeAll(self):
@@ -373,6 +386,17 @@ class TestInteractive(metaclass=OrderedClassMembers):
         self.alexander.send_command("go depth 18 searchmoves e3e2")
         self.alexander.expect("* score mate -1 * pv e3e2 f7f5")
         self.alexander.starts_with("bestmove e3e2")
+
+    def test_verify_nnue_network(self):
+        current_path = os.path.abspath(os.getcwd())
+        Alexander(
+            f"export_net {os.path.join(current_path , 'verify.nnue')}".split(" "), True
+        )
+
+        self.alexander.send_command("setoption name EvalFile value verify.nnue")
+        self.alexander.send_command("position startpos")
+        self.alexander.send_command("go depth 5")
+        self.alexander.starts_with("bestmove")
 
     def test_multipv_setting(self):
         self.alexander.send_command("setoption name MultiPV value 4")

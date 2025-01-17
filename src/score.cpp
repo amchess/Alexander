@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ namespace Alexander {
 Score::Score(Value v, const Position& pos) {
     assert(-VALUE_INFINITE < v && v < VALUE_INFINITE);
 
-    if (std::abs(v) < VALUE_TB_WIN_IN_MAX_PLY)
+    if (!is_decisive(v))
     {
         score = InternalUnits{UCIEngine::to_cp(v, pos)};
     }

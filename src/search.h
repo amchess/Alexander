@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -31,8 +31,8 @@
 #include <string_view>
 #include <vector>
 
+#include "history.h"
 #include "misc.h"
-#include "movepick.h"
 //from classical
 #include "numa.h"
 #include "position.h"
@@ -42,11 +42,13 @@
 //from Alexander begin
 #include "evaluate.h"
 #include "book/book_manager.h"
+#include <memory>
 //from Alexander end
 #include "types.h"
 
 namespace Alexander {
 
+class ShashinManager;  //shashin
 // Different node types, used as a template parameter
 enum NodeType {
     NonPV,
@@ -59,6 +61,7 @@ class ThreadPool;
 class OptionsMap;
 
 namespace Search {
+
 // Stack struct keeps track of the information we need to remember from nodes
 // shallower and deeper in the tree during the search. Each search thread has
 // its own array of Stack objects, indexed by the current ply.
@@ -66,22 +69,21 @@ struct Stack {
     Move*                       pv;
     PieceToHistory*             continuationHistory;
     CorrectionHistory<PieceTo>* continuationCorrectionHistory;
-    int                       ply;
-    Move                      currentMove;
-    Move                      excludedMove;
-    Value                     staticEval;
-    int                       statScore;
-    int                       moveCount;
-    bool                      inCheck;
-    bool                      ttPv;
-    bool                      ttHit;
-    int                       cutoffCnt;
-    //from Crystal begin
+    int                         ply;
+    Move                        currentMove;
+    Move                        excludedMove;
+    Value                       staticEval;
+    int                         statScore;
+    int                         moveCount;
+    bool                        inCheck;
+    bool                        ttPv;
+    bool                        ttHit;
+    int                         cutoffCnt;
+    //from Crystal-shashin begin
     bool secondaryLine;
     bool mainLine;
-    //from Crystal end
+    //from Crystal-shashin end
 };
-
 
 // RootMove struct is used for moves at the root of the tree. For each root move
 // we store a score and a PV (really a refutation in the case of moves which
@@ -132,7 +134,6 @@ struct LimitsType {
     int                      movestogo, depth, mate, perft, infinite;
     uint64_t                 nodes;
     bool                     ponderMode;
-    Square                   capSq;
 };
 
 
@@ -246,7 +247,7 @@ class Worker {
    public:
     size_t threadIdx;  //mcts
     Worker(SharedState&, std::unique_ptr<ISearchManager>, size_t, NumaReplicatedAccessToken);
-
+    ~Worker();  //shashin
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
     void clear();
@@ -275,13 +276,11 @@ class Worker {
     CorrectionHistory<Minor>        minorPieceCorrectionHistory;
     CorrectionHistory<NonPawn>      nonPawnCorrectionHistory[COLOR_NB];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
-    RootMoves                     rootMoves;       //mcts
-    Depth                         completedDepth;  //mcts
-    //begin from Shashin
-    int8_t shashinWinProbabilityRange = 0;
-    int    shashinPly                 = 0;
-    //end from Shashin
-    bool nmpGuard, nmpGuardV;  //from Crystal
+    RootMoves                       rootMoves;            //mcts
+    Depth                           completedDepth;       //mcts
+    bool                            nmpGuard, nmpGuardV;  //from Crystal-shashin
+    ShashinManager&                 getShashinManager();  //from crystal-Shashin
+
    private:
     void iterative_deepening();
 
@@ -304,12 +303,15 @@ class Worker {
     TimePoint elapsed() const;
     TimePoint elapsed_time() const;
 
+    Value evaluate(const Position&);
+
     LimitsType limits;
 
     size_t                pvIdx, pvLast;
     std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
-    int                   selDepth, nmpMinPly, nmpSide;  //crystal
-    //no optimism for classical
+    int                   selDepth, nmpMinPly, nmpSide;  //from crystal-shashin
+    Value                 optimism[COLOR_NB];
+
     Position  rootPos;
     StateInfo rootState;
     //mcts
@@ -334,11 +336,14 @@ class Worker {
     const OptionsMap&   options;
     ThreadPool&         threads;
     TranspositionTable& tt;
-
+    std::unique_ptr<ShashinManager> shashinManager;  //Shashin
     friend class Alexander::ThreadPool;
     friend class SearchManager;
 };
-
+struct ConthistBonus {
+    int index;
+    int weight;
+};
 //livebook begin
 #ifdef USE_LIVEBOOK
 void set_livebook_depth(int book_depth);
@@ -369,8 +374,6 @@ void set_variety(const std::string& varietyOption);  //variety
 size_t cURL_WriteFunc(void* contents, size_t size, size_t nmemb, std::string* s);
 #endif
 //from Livebook end
-Value static_value(Position&      pos,
-                   Search::Stack* ss);  //mcts
 }  // namespace Alexander
 
 #endif  // #ifndef SEARCH_H_INCLUDED

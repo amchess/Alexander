@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,11 +18,11 @@
 
 #include "movepick.h"
 
-#include <algorithm>
 #include <cassert>
-#include <utility>
+#include <limits>
 
 #include "bitboard.h"
+#include "misc.h"
 #include "position.h"
 
 namespace Alexander {
@@ -156,11 +156,11 @@ void MovePicker::score() {
             Square    to   = m.to_sq();
 
             // histories
-            m.value = (*mainHistory)[pos.side_to_move()][m.from_to()];
+            m.value = 2 * (*mainHistory)[pos.side_to_move()][m.from_to()];
             m.value += 2 * (*pawnHistory)[pawn_structure_index(pos)][pc][to];
-            m.value += 2 * (*continuationHistory[0])[pc][to];
+            m.value += (*continuationHistory[0])[pc][to];
             m.value += (*continuationHistory[1])[pc][to];
-            m.value += (*continuationHistory[2])[pc][to] / 3;
+            m.value += (*continuationHistory[2])[pc][to];
             m.value += (*continuationHistory[3])[pc][to];
             m.value += (*continuationHistory[5])[pc][to];
 
@@ -197,19 +197,13 @@ void MovePicker::score() {
 
 // Returns the next move satisfying a predicate function.
 // This never returns the TT move, as it was emitted before.
-template<MovePicker::PickType T, typename Pred>
+template<typename Pred>
 Move MovePicker::select(Pred filter) {
 
-    while (cur < endMoves)
-    {
-        if constexpr (T == Best)
-            std::swap(*cur, *std::max_element(cur, endMoves));
-
+    for (; cur < endMoves; ++cur)
         if (*cur != ttMove && filter())
             return *cur++;
 
-        cur++;
-    }
     return Move::none();
 }
 
@@ -243,7 +237,7 @@ top:
         goto top;
 
     case GOOD_CAPTURE :
-        if (select<Next>([&]() {
+        if (select([&]() {
                 // Move losing capture to endBadCaptures to be tried later
                 return pos.see_ge(*cur, -cur->value / 18) ? true
                                                           : (*endBadCaptures++ = *cur, false);
@@ -267,7 +261,7 @@ top:
         [[fallthrough]];
 
     case GOOD_QUIET :
-        if (!skipQuiets && select<Next>([]() { return true; }))
+        if (!skipQuiets && select([]() { return true; }))
         {
             if ((cur - 1)->value > -7998 || (cur - 1)->value <= quiet_threshold(depth))
                 return *(cur - 1);
@@ -284,7 +278,7 @@ top:
         [[fallthrough]];
 
     case BAD_CAPTURE :
-        if (select<Next>([]() { return true; }))
+        if (select([]() { return true; }))
             return *(cur - 1);
 
         // Prepare the pointers to loop over the bad quiets
@@ -296,7 +290,7 @@ top:
 
     case BAD_QUIET :
         if (!skipQuiets)
-            return select<Next>([]() { return true; });
+            return select([]() { return true; });
 
         return Move::none();
 
@@ -305,17 +299,16 @@ top:
         endMoves = generate<EVASIONS>(pos, cur);
 
         score<EVASIONS>();
+        partial_insertion_sort(cur, endMoves, std::numeric_limits<int>::min());
         ++stage;
         [[fallthrough]];
 
     case EVASION :
-        return select<Best>([]() { return true; });
+    case QCAPTURE :
+        return select([]() { return true; });
 
     case PROBCUT :
-        return select<Next>([&]() { return pos.see_ge(*cur, threshold); });
-
-    case QCAPTURE :
-        return select<Next>([]() { return true; });
+        return select([&]() { return pos.see_ge(*cur, threshold); });
     }
 
     assert(false);

@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by

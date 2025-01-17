@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "movegen.h"
+//classical
 #include "syzygy/tbprobe.h"
 #include "tt.h"
 #include "uci.h"
@@ -1075,6 +1076,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si, Thread* th) 
     set_state();
 
     assert(pos_is_ok());
+
     return *this;
 }
 
@@ -1146,7 +1148,7 @@ void Position::set_state() const {
             {
                 st->nonPawnMaterial[color_of(pc)] += PieceValue[pc];
 
-                if (type_of(pc) == QUEEN || type_of(pc) == ROOK)
+                if (type_of(pc) >= ROOK)
                     st->majorPieceKey ^= Zobrist::psq[pc][s];
 
                 else
@@ -1312,14 +1314,23 @@ void Position::update_slider_blockers(Color c) const {
 // Slider attacks use the occupied bitboard to indicate occupancy.
 Bitboard Position::attackers_to(Square s, Bitboard occupied) const {
 
-    return (pawn_attacks_bb(BLACK, s) & pieces(WHITE, PAWN))
-         | (pawn_attacks_bb(WHITE, s) & pieces(BLACK, PAWN))
-         | (attacks_bb<KNIGHT>(s) & pieces(KNIGHT))
-         | (attacks_bb<ROOK>(s, occupied) & pieces(ROOK, QUEEN))
+    return (attacks_bb<ROOK>(s, occupied) & pieces(ROOK, QUEEN))
          | (attacks_bb<BISHOP>(s, occupied) & pieces(BISHOP, QUEEN))
-         | (attacks_bb<KING>(s) & pieces(KING));
+         | (pawn_attacks_bb(BLACK, s) & pieces(WHITE, PAWN))
+         | (pawn_attacks_bb(WHITE, s) & pieces(BLACK, PAWN))
+         | (attacks_bb<KNIGHT>(s) & pieces(KNIGHT)) | (attacks_bb<KING>(s) & pieces(KING));
 }
 
+bool Position::attackers_to_exist(Square s, Bitboard occupied, Color c) const {
+
+    return ((attacks_bb<ROOK>(s) & pieces(c, ROOK, QUEEN))
+            && (attacks_bb<ROOK>(s, occupied) & pieces(c, ROOK, QUEEN)))
+        || ((attacks_bb<BISHOP>(s) & pieces(c, BISHOP, QUEEN))
+            && (attacks_bb<BISHOP>(s, occupied) & pieces(c, BISHOP, QUEEN)))
+        || (((pawn_attacks_bb(~c, s) & pieces(PAWN)) | (attacks_bb<KNIGHT>(s) & pieces(KNIGHT))
+             | (attacks_bb<KING>(s) & pieces(KING)))
+            & pieces(c));
+}
 
 // Tests whether a pseudo-legal move is legal
 bool Position::legal(Move m) const {
@@ -1361,7 +1372,7 @@ bool Position::legal(Move m) const {
         Direction step = to > from ? WEST : EAST;
 
         for (Square s = to; s != from; s += step)
-            if (attackers_to(s) & pieces(~us))
+            if (attackers_to_exist(s, pieces(), ~us))
                 return false;
 
         // In case of Chess960, verify if the Rook blocks some checks.
@@ -1372,7 +1383,7 @@ bool Position::legal(Move m) const {
     // If the moving piece is a king, check whether the destination square is
     // attacked by the opponent.
     if (type_of(piece_on(from)) == KING)
-        return !(attackers_to(to, pieces() ^ from) & pieces(~us));
+        return !(attackers_to_exist(to, pieces() ^ from, ~us));
 
     // A non-king move is legal if and only if it is not pinned or it
     // is moving along the ray towards or away from the king.
@@ -1441,7 +1452,7 @@ bool Position::pseudo_legal(const Move m) const {
         }
         // In case of king moves under check we have to remove the king so as to catch
         // invalid moves like b1a1 when opposite queen is on c1.
-        else if (attackers_to(to, pieces() ^ from) & pieces(~us))
+        else if (attackers_to_exist(to, pieces() ^ from, ~us))
             return false;
     }
 
@@ -1521,6 +1532,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
     ++st->rule50;
     ++st->pliesFromNull;
 
+    //classical
     Color  us       = sideToMove;
     Color  them     = ~us;
     Square from     = m.from_sq();
@@ -1572,7 +1584,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             st->nonPawnMaterial[them] -= PieceValue[captured];
             st->nonPawnKey[them] ^= Zobrist::psq[captured][capsq];
 
-            if (type_of(captured) == QUEEN || type_of(captured) == ROOK)
+            if (type_of(captured) >= ROOK)
                 st->majorPieceKey ^= Zobrist::psq[captured][capsq];
 
             else
@@ -1645,7 +1657,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             st->materialKey ^=
               Zobrist::psq[promotion][pieceCount[promotion] - 1] ^ Zobrist::psq[pc][pieceCount[pc]];
 
-            if (promotionType == QUEEN || promotionType == ROOK)
+            if (promotionType >= ROOK)
                 st->majorPieceKey ^= Zobrist::psq[promotion][to];
 
             else
@@ -1672,7 +1684,7 @@ void Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
             st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
         }
 
-        else if (type_of(pc) == QUEEN || type_of(pc) == ROOK)
+        else if (type_of(pc) >= ROOK)
             st->majorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
 
         else
@@ -1801,7 +1813,7 @@ void Position::do_castling(Color us, Square from, Square& to, Square& rfrom, Squ
 
 // Used to do a "null move": it flips
 // the side to move without executing any move on the board.
-void Position::do_null_move(StateInfo& newSt, TranspositionTable& tt) {
+void Position::do_null_move(StateInfo& newSt, const TranspositionTable& tt) {
 
     assert(!checkers());
     assert(&newSt != st);
@@ -1857,10 +1869,7 @@ Key Position::key_after(Move m) const {
     Piece  captured = piece_on(to);
     Key    k        = st->key ^ Zobrist::side;
 
-    if (captured)
-        k ^= Zobrist::psq[captured][to];
-
-    k ^= Zobrist::psq[pc][to] ^ Zobrist::psq[pc][from];
+    k ^= Zobrist::psq[captured][to] ^ Zobrist::psq[pc][to] ^ Zobrist::psq[pc][from];
 
     return (captured || type_of(pc) == PAWN) ? k : adjust_key50<true>(k);
 }
@@ -1998,7 +2007,10 @@ bool Position::has_repeated() const {
     }
     return false;
 }
-//from Crystal begin
+//from Crystal-shashin begin
+/*
+The following function checks whether the king is under attack and has few or no safe squares to move to, thus determining whether the king is in danger. 
+*/
 bool Position::king_danger(Color c) const {
 
     Square   ksq = square<KING>(c);
@@ -2034,7 +2046,7 @@ bool Position::king_danger(Color c) const {
 
     return false;
 }
-//from Crystal end
+//from Crystal-shashin end
 
 // Tests if the position has a move which draws by repetition.
 // This function accurately matches the outcome of is_draw() over all legal moves.
@@ -2133,7 +2145,7 @@ bool Position::pos_is_ok() const {
         return true;
 
     if (pieceCount[W_KING] != 1 || pieceCount[B_KING] != 1
-        || attackers_to(square<KING>(~sideToMove)) & pieces(sideToMove))
+        || attackers_to_exist(square<KING>(~sideToMove), pieces(), sideToMove))
         assert(0 && "pos_is_ok: Kings");
 
     if ((pieces(PAWN) & (Rank1BB | Rank8BB)) || pieceCount[W_PAWN] > 8 || pieceCount[B_PAWN] > 8)

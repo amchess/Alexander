@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+
 #include "numa.h"
 //for classical begin
 #include "material.h"
@@ -171,7 +172,7 @@ class ThreadPool {
     std::vector<std::unique_ptr<Thread>> threads;
     std::vector<NumaIndex>               boundThreadToNumaNode;
 
-    uint64_t accumulate(std::atomic<uint64_t> Search::Worker::*member) const {
+    uint64_t accumulate(std::atomic<uint64_t> Search::Worker::* member) const {
 
         uint64_t sum = 0;
         for (auto&& th : threads)

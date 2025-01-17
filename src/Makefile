@@ -1,5 +1,5 @@
 # Alexander, a UCI chess playing engine derived from Stockfish
-# Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers
+# Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers
 #
 # Alexander is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ ifeq ($(OS),Windows_NT)
 	ifneq ($(COMP),ndk)
 		target_windows = yes
 	endif
-else ifeq ($(COMP), mingw)
+else ifeq ($(COMP),mingw)
 	target_windows = yes
 	ifeq ($(WINE_PATH),)
 		WINE_PATH := $(shell which wine)
@@ -62,9 +62,9 @@ SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp 
 	livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp \
 	livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp \
 	livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp \
-	livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp
+	livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp shashin/shashin_manager.cpp
 
-HEADERS = benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h pawns.h \
+HEADERS = benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h history.h pawns.h \
 		position.h \
 		psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
 		tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h \
@@ -74,10 +74,11 @@ HEADERS = benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.
 		livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h \
 		livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h \
 		livebook/LichessGames.h  livebook/ChessDBContributor.h \
-		livebook/json/json.hpp
+		livebook/json/json.hpp shashin/shashin_helper.h shashin/shashin_manager.h shashin/shashin_types.h
+
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:livebook:livebook/analysis:livebook/json
+VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/analysis:livebook/json
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -511,7 +512,11 @@ ifeq ($(COMP),icx)
 	CXXFLAGS += --intel -pedantic -Wextra -Wshadow -Wmissing-prototypes \
 		-Wconditional-uninitialized -Wabi -Wdeprecated
 endif
-
+# mac build begin
+ifeq ($(shell $(CXX) --version | grep -c clang), 1)
+    CXXFLAGS += -Wno-backend-plugin
+endif
+# mac build end
 ifeq ($(COMP),clang)
 	comp=clang
 	CXX=clang++
@@ -993,12 +998,12 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o
+	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o ./shashin/shashin_manager.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda *.s PGOBENCH.out
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda ./shashin/*.gcda *.s PGOBENCH.out
 	@rm -f alexander.profdata *.profraw
 	@rm -f alexander.*args*
 	@rm -f alexander.*lt*

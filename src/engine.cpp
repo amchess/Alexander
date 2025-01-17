@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -171,10 +171,11 @@ Engine::Engine(std::optional<std::string> path) :
     options["Experience Book Min Depth"] << Option(4, 1, 255);
     //From Kelly end
     //From MCTS begin
-    options["MCTS"] << Option(false);
+    options["MCTS by Shashin"] << Option(false);
     options["MCTSThreads"] << Option(1, 1, 512);
     options["MCTS Multi Strategy"] << Option(20, 0, 100);
     options["MCTS Multi MinVisits"] << Option(5, 0, 1000);
+    options["MCTS Explore"] << Option(false);
     //From MCTS end
     //livebook begin
 #ifdef USE_LIVEBOOK
@@ -255,7 +256,7 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-    limits.capSq = capSq;
+	//from classical
 
     threads.start_thinking(options, pos, states, limits);
 }
@@ -263,13 +264,14 @@ void Engine::stop() { threads.stop = true; }
 
 void Engine::search_clear() {
     wait_for_search_finished();
+
     tt.clear(threads);
     MCTS.clear();  // mcts
     threads.clear();
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files
-    WDLModel::init();                         //from lerning and Shashin theory
+    WDLModel::init();                         //from learning and shashin
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -295,7 +297,6 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
     states = StateListPtr(new std::deque<StateInfo>(1));
     pos.set(fen, options["UCI_Chess960"], &states->back(), threads.main_thread());  //for classical
 
-    capSq = SQ_NONE;
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
@@ -317,7 +318,6 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
         //Kelly end
         states->emplace_back();
         pos.do_move(m, states->back());
-        capSq = SQ_NONE;
         //for classical
     }
 }
@@ -351,6 +351,7 @@ void Engine::resize_threads() {
     threads.wait_for_search_finished();
     threads.set(numaContext.get_numa_config(), {bookMan, options, threads, tt},
                 updateContext);  //book management
+
     // Reallocate the hash with the new threadpool size
     set_tt_size(options["Hash"]);
 }
@@ -364,6 +365,7 @@ void Engine::set_tt_size(size_t mb) {
 
 void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
+//from classical
 // utility functions
 
 void Engine::trace_eval() const {

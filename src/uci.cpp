@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2024 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -61,9 +61,7 @@ void UCIEngine::print_info_string(std::string_view str) {
     for (auto& line : split(str, "\n"))
     {
         if (!is_whitespace(line))
-        {
-            std::cout << "info string " << line << '\n';
-        }
+        { std::cout << "info string " << line << '\n'; }
     }
     sync_cout_end();
 }
@@ -86,6 +84,7 @@ void UCIEngine::init_search_update_listeners() {
     engine.set_on_update_full(
       [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
     engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
+	//from classical
 }
 
 void UCIEngine::loop() {
@@ -123,9 +122,7 @@ void UCIEngine::loop() {
 
                 //Perform Q-learning if enabled
                 if (LD.learning_mode() == LearningMode::Self)
-                {
-                    putQLearningTrajectoryIntoLearningTable();
-                }
+                { putQLearningTrajectoryIntoLearningTable(); }
                 if (!LD.is_readonly())
                 {
                     //Save to learning file
@@ -580,54 +577,6 @@ void UCIEngine::position(std::istringstream& is) {
     engine.set_position(fen, moves);
 }
 
-namespace {
-
-struct WinRateParams {
-    double a;
-    double b;
-};
-//for Shashin theory and learning begin
-WinRateParams win_rate_params(int materialClamp) {
-    double m = materialClamp / 58.0;
-    // Return a = p_a(material) and b = p_b(material), see github.com/official-stockfish/WDL_model
-    constexpr double as[] = {-41.25712052, 121.47473115, -124.46958843, 411.84490997};
-    constexpr double bs[] = {84.92998051, -143.66658718, 80.09988253, 49.80869370};
-
-    double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
-    double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
-
-    return {a, b};
-}
-//for Shashin theory and learning end
-
-WinRateParams win_rate_params(const Position& pos) {
-    int material = pos.count<PAWN>() + 3 * pos.count<KNIGHT>() + 3 * pos.count<BISHOP>()
-                 + 5 * pos.count<ROOK>() + 9 * pos.count<QUEEN>();
-
-    // The fitted model only uses data for material counts in [17, 78], and is anchored at count 58.
-    double m = std::clamp(material, 17, 78) / 58.0;
-
-    // Return a = p_a(material) and b = p_b(material), see github.com/official-stockfish/WDL_model
-    constexpr double as[] = {-41.25712052, 121.47473115, -124.46958843, 411.84490997};
-    constexpr double bs[] = {84.92998051, -143.66658718, 80.09988253, 49.80869370};
-
-    double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
-    double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
-
-    return {a, b};
-}
-
-// The win rate model is 1 / (1 + exp((a - eval) / b)), where a = p_a(material) and b = p_b(material).
-// It fits the LTC fishtest statistics rather accurately.
-int win_rate_model(Value v, const Position& pos) {
-
-    auto [a, b] = win_rate_params(pos);
-
-    // Return the win rate in per mille units, rounded to the nearest integer.
-    return int(0.5 + 1000 / (1 + std::exp((a - double(v)) / b)));
-}
-}
-
 std::string UCIEngine::format_score(const Score& s) {
     constexpr int TB_CP = 20000;
     const auto    format =
@@ -647,7 +596,7 @@ std::string UCIEngine::format_score(const Score& s) {
 }
 //from Khalid begin
 int UCIEngine::getNormalizeToPawnValue(Position& pos) {
-    auto [a, b] = win_rate_params(pos);
+    auto [a, b] = WDLModel::win_rate_params(pos);
     return a;
 }
 //from Khalid end
@@ -660,30 +609,11 @@ int UCIEngine::to_cp(Value v, const Position& pos) {
     // (log(1/L - 1) - log(1/W - 1)) / (log(1/L - 1) + log(1/W - 1)).
     // Based on our win_rate_model, this simply yields v / a.
 
-    auto [a, b] = win_rate_params(pos);
+    auto [a, b] = WDLModel::win_rate_params(pos);
 
     return std::round(100 * int(v) / a);
 }
 
-std::string UCIEngine::wdl(Value v, const Position& pos) {
-    std::stringstream ss;
-
-    int wdl_w = win_rate_model(v, pos);
-    int wdl_l = win_rate_model(-v, pos);
-    int wdl_d = 1000 - wdl_w - wdl_l;
-    ss << wdl_w << " " << wdl_d << " " << wdl_l;
-
-    return ss.str();
-}
-//for Shashin theory and learning begin
-uint8_t UCIEngine::getWinProbability(int valueClamp, int materialClamp) {
-    auto [a, b]  = win_rate_params(materialClamp);
-    double wdl_w = 0.5 + 1000 / (1 + std::exp((a - double(valueClamp)) / b));
-    double wdl_l = 0.5 + 1000 / (1 + std::exp((a - double(-valueClamp)) / b));
-    double wdl_d = 1000 - wdl_w - wdl_l;
-    return static_cast<uint8_t>(round((wdl_w + wdl_d / 2.0) / 10.0));
-}
-//for Shashin theory and learning end
 std::string UCIEngine::square(Square s) {
     return std::string{char('a' + file_of(s)), char('1' + rank_of(s))};
 }

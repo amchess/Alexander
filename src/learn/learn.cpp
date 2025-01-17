@@ -3,7 +3,6 @@
 #include <sstream>
 #include "../misc.h"
 #include "learn.h"
-#include <cmath>
 #include <algorithm>
 #include <cstdint>
 #include "../uci.h"

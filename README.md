@@ -1,6 +1,9 @@
 # Introduction
 
+![Alexander Logo](logo/Alexander.bmp)
+
 Alexander is a free UCI chess engine derived from Stockfish family chess engines.
+For the evaluation function, we utilize the collaboration between Leela Chess Zero and Stockfish, for which we express our sincere gratitude.
 The goal is to apply Alexander Shashin theory exposed on the following book :
 https://www.amazon.com/Best-Play-Method-Discovering-Strongest/dp/1936277468
 to improve
@@ -14,6 +17,8 @@ to improve
        * Tal-Capablanca
        * Capablanca-Petrosian
        * Tal-Capablanca-Petrosian
+
+Also during the search, to enhance it, we use both standard and Q/Self reinforcement learning.
 
 ## Terms of use
 
@@ -146,8 +151,17 @@ Elo range     | Handicapped Depth |
 If enabled, the engine not only simulates the thought process of a player of a certain level but also the mistakes he can make. These mistakes become more frequent the lower the player's Elo rating. This is the handicap mode implemented by Stockfish, but when combined with the previous options that simulate a player's thinking system, it truly approximates a "human avatar".
 
 #### Avatar File
-A file in .avt format with the profile of a player. You can edit this file containing the weigths of Stockfish classical eval terms, from 0 to 100, but with a private tool,
-we can generate those values to simulate a real player.
+A file in .avt format with a player profile. You can edit this file containing the weights of Stockfish's classic evaluation terms, from 0 to 100, but with a private tool, we can generate these values to simulate a real player.
+The private tool first analyzes the player's games and then generates his player card and avatar.
+In this way, Alexander turns into the player's alter ego, simulating not only his playing strength but also his style:
+no frustration for the OTB player who will not always lose. Once in a while, he will win, and most importantly, he will have an ideal sparring partner to improve.
+The data sheet and our private NLG sw (Virtual trainer) will also allow him to understand his own mistakes verbally, simulating a live instructor!
+Examples:
+
+[Player card](examples/PlayerCard.xlsx)
+
+[Avatar](examples/Avatar.avt)
+
 
 ### Sygyzy End Game table bases
 
@@ -195,7 +209,9 @@ If the number is greater than threads number, all threads are for full depth bru
 
 ### MonteCarlo Tree Search section (experimental: thanks to original Stephan Nicolet work)
 
-_Boolean, Default: False_ If activated, thanks to Shashin theory, the engine will use the MonteCarlo Tree Search for Capablanca quiescent type positions and also for caos ones, in the manner specified by the following parameters. The idea is to exploit Lc0 best results in those positions types, because Lc0 uses mcts in the search.
+#### MCTS by Shashin
+
+_Boolean, Default: False_ If activated, thanks to Shashin theory, the engine will use the MonteCarlo Tree Search for Petrosian high, high middle and middle positions, in the manner specified by the following parameters. The idea is to exploit Lc0 best results in those positions types, because Lc0 uses mcts in the search.
 
 #### MCTSThreads
 
@@ -212,6 +228,10 @@ Only in multi mcts mode, for tree policy.
 
 _Integer, Default: 5, Min: 0, Max: 1000_
 Only in multi mcts mode, for Upper Confidence Bound.
+
+#### MCTS Explore
+
+_Boolean, Default: False_ If activated, mcts is also performed for highly Tal type positions and Capablanca and Petrosian type positions.
 
 ### Live Book section (thanks to Eman's author Khalid Omar for windows builds)
 
@@ -336,24 +356,25 @@ are settled, it will force the initial position/algorithm understanding
 If, in the wdl model, we define wdl_w=Win percentage, wdl_d=Drawn percentage and Win probability=(2*wdl_w+wdl_d)/10, 
 we have the following mapping:
 
-Win probability range | Shashin position’s type        | Informator symbols    | 
-| --------------------| ------------------------------ | ----------------------|
-| [0, 6]              | High Petrosian                 | -+                    | 
-| [7, 11]              | Middle-High Petrosian          | -+ \ -/+              |
-| [12,14]             | Middle Petrosian               | -/+                   |  
-| [15,20]             | Middle-Low Petrosian           | -/+ \ =/+             |
-| [21,24]             | Low Petrosian                  | =/+                   |
-| [24,49]             | Caos: Capablanca-Low Petrosian | =/+ \ =               |
-| [50]                | Capablanca                     | =                     |
-| [51,76]             | Caos: Capablanca-Low Tal       | = \ +/=               | 
-| [77,79]             | Low Tal                        | +/=                   |
-| [80,85]             | Low-Middle Tal                 | +/= | +/-             |
-| [86,88]             | Middle Tal                     | +/-                   |
-| [89,93]             | Middle-High Tal                | +/- \ +-              |
-| [94,100]            | High Tal                       | +-                    | 
+| **WDL Range (W, D, L)**       | **Shashin Position’s Type**          | **Win Probability Range** | **Informator Symbols**| **Description**                                             |
+|-------------------------------|--------------------------------------|---------------------------|-----------------------|-------------------------------------------------------------|
+| [0, 3], [0, 4], [96, 100]    | High Petrosian                       | [0, 5]                  | -+                     | Winning: a decisive advantage, with the position clearly leading to victory.      |
+| [4, 6], [5, 8], [89, 95]     | High-Middle Petrosian                | [6, 10]                 | -+ \ -/+               | Decisive advantage: dominant position and likely winning.                      |
+| [7, 9], [9, 12], [80, 87]    | Middle Petrosian                     | [11, 15]                 | -/+                    | Clear advantage: a substantial positional advantage, but a win is not yet inevitable.                          |
+| [10, 12], [13, 16], [73, 79]  | Middle-Low Petrosian                 | [16, 20]                 | -/+ \ =/+              | Significant advantage: strong edge                   |
+| [13, 15], [17, 39], [66, 71]  | Low Petrosian                        | [21, 24]                 | =/+                    | Slight advantage with a positional edge, but no immediate threats.              |
+| [0, 30], [40, 99], [31, 64]  | Chaos: Capablanca-Petrosian          | [25, 49]                 | ↓                      | Opponent pressure and initiative: defensive position.        |
+| [0, 0], [100, 100], [0, 0]    | Capablanca                           | [50, 50]                 | =                      | Equal position. Both sides are evenly matched, with no evident advantage.           |
+| [30, 64], [40, 99], [0, 30]  | Chaos: Capablanca-Tal                | [51, 75]                 | ↑                      | Initiative: playing dictation with active moves and forcing ideas.                     |
+| [65, 71], [17, 39], [13, 15]   | Low Tal                              | [76, 79]                 | +/=                    | Slight advantage: a minor positional edge, but it’s not significant.                    |
+| [72, 78], [13, 16], [10, 12]  | Middle-Low Tal                       | [80, 84]                 | +/= \ +/-              |  Slightly better, tending toward a clear advantage. The advantage is growing, but the position is still not decisive.            |
+| [79, 87], [9, 12], [7, 9]    | Middle Tal                           | [85, 89]                 | +/-                    | Clear advantage: a significant edge, but still with defensive chances.                          |
+| [88, 95], [5, 8], [4, 6]      | High-Middle Tal                      | [90, 94]                 | +/- \ +-               | Dominant position, almost decisive, not quite winning yet, but trending toward victory.                           |
+| [96, 100], [0, 4], [0, 3]    | High Tal                             | [95, 100]                | +-                     | Winning: a decisive advantage, with victory nearly assured.   |
+| In particular, [33, 33], [33, 33], [33, 33]                   | Chaos: Capablanca-Petrosian-Tal | (Unclassified)                   | ∞                      | Total chaos: unclear position, dynamically balanced, with no clear advantage for either side and no clear positional trends.                       |
 
 N.B.
-The winProbability also take into account the depth at which a move has been calculated.
+The wdl model also takes into account the history of the position at which a move has been calculated.
 So, it's more effective than the cp. 
 
 #### Tal
@@ -381,6 +402,7 @@ Stockfish community
 
 ## Alexander team
 - engine owner and main developer: ICCF IM Andrea Manzo (https://www.iccf.com/player?id=241224)
+- IM Yohan Benitah for his professional chess understanding and help in testing against neural networks 
 - official tester: ICCF CCE and CCM Maurizio Platino (https://www.iccf.com/player?id=241094)
 - official tester: Maurizio Colbacchini, FSI 1N
 - official tester and concept analyst: ICCF GM Fabio Finocchiaro (https://www.iccf.com/player?id=240090), 2012 ICCF world champion 
@@ -623,17 +645,56 @@ first, where the basics of Stockfish development are explained.
 
 ## Terms of use
 
-Stockfish is free, and distributed under the **GNU General Public License version 3**
-(GPL v3). Essentially, this means that you are free to do almost exactly
-what you want with the program, including distributing it among your
-friends, making it available for download from your web site, selling
-it (either by itself or as part of some bigger software package), or
-using it as the starting point for a software project of your own.
+Alexander is free and distributed under the
+[**GNU General Public License version 3**][license-link] (GPL v3). Essentially,
+this means you are free to do almost exactly what you want with the program,
+including distributing it among your friends, making it available for download
+from your website, selling it (either by itself or as part of some bigger
+software package), or using it as the starting point for a software project of
+your own.
 
-The only real limitation is that whenever you distribute Stockfish in
-some way, you must always include the full source code, or a pointer
-to where the source code can be found. If you make any changes to the
-source code, these changes must also be made available under the GPL.
+The only real limitation is that whenever you distribute Brainlearn in some way,
+you MUST always include the license and the full source code (or a pointer to
+where the source code can be found) to generate the exact binary you are
+distributing. If you make any changes to the source code, these changes must
+also be made available under GPL v3.
 
-For full details, read the copy of the GPL v3 found in the file named
-*Copying.txt*.
+## Acknowledgements
+
+Stockfish uses neural networks trained on [data provided by the Leela Chess Zero
+project][lc0-data-link], which is made available under the [Open Database License][odbl-link] (ODbL).
+
+
+[authors-link]:       https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS
+[build-link]:         https://github.com/official-stockfish/Stockfish/actions/workflows/stockfish.yml
+[commits-link]:       https://github.com/official-stockfish/Stockfish/commits/master
+[discord-link]:       https://discord.gg/GWDRS3kU6R
+[issue-link]:         https://github.com/official-stockfish/Stockfish/issues/new?assignees=&labels=&template=BUG-REPORT.yml
+[discussions-link]:   https://github.com/official-stockfish/Stockfish/discussions/new
+[fishtest-link]:      https://tests.stockfishchess.org/tests
+[guideline-link]:     https://github.com/official-stockfish/fishtest/wiki/Creating-my-first-test
+[license-link]:       https://github.com/official-stockfish/Stockfish/blob/master/Copying.txt
+[programming-link]:   https://www.chessprogramming.org/Main_Page
+[programmingsf-link]: https://www.chessprogramming.org/Stockfish
+[readme-link]:        https://github.com/official-stockfish/Stockfish/blob/master/README.md
+[release-link]:       https://github.com/official-stockfish/Stockfish/releases/latest
+[src-link]:           https://github.com/official-stockfish/Stockfish/tree/master/src
+[stockfish128-logo]:  https://stockfishchess.org/images/logo/icon_128x128.png
+[uci-link]:           https://backscattering.de/chess/uci/
+[website-link]:       https://stockfishchess.org
+[website-blog-link]:  https://stockfishchess.org/blog/
+[wiki-link]:          https://github.com/official-stockfish/Stockfish/wiki
+[wiki-compile-link]:  https://github.com/official-stockfish/Stockfish/wiki/Compiling-from-source
+[wiki-uci-link]:      https://github.com/official-stockfish/Stockfish/wiki/UCI-&-Commands
+[wiki-usage-link]:    https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage
+[worker-link]:        https://github.com/official-stockfish/fishtest/wiki/Running-the-worker
+[lc0-data-link]:      https://storage.lczero.org/files/training_data
+[odbl-link]:          https://opendatacommons.org/licenses/odbl/odbl-10.txt
+
+[build-badge]:        https://img.shields.io/github/actions/workflow/status/official-stockfish/Stockfish/stockfish.yml?branch=master&style=for-the-badge&label=stockfish&logo=github
+[commits-badge]:      https://img.shields.io/github/commits-since/official-stockfish/Stockfish/latest?style=for-the-badge
+[discord-badge]:      https://img.shields.io/discord/435943710472011776?style=for-the-badge&label=discord&logo=Discord
+[fishtest-badge]:     https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Fishtest&up_color=success&up_message=Online&url=https%3A%2F%2Ftests.stockfishchess.org%2Ftests%2Ffinished
+[license-badge]:      https://img.shields.io/github/license/official-stockfish/Stockfish?style=for-the-badge&label=license&color=success
+[release-badge]:      https://img.shields.io/github/v/release/official-stockfish/Stockfish?style=for-the-badge&label=official%20release
+[website-badge]:      https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https%3A%2F%2Fstockfishchess.org
