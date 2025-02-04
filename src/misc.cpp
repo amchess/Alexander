@@ -45,7 +45,7 @@ namespace Alexander {
 namespace {
 
 // Version number or dev.
-constexpr std::string_view version = "4.0";
+constexpr std::string_view version = "4.1";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We

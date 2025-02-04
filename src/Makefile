@@ -52,24 +52,24 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
-SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp \
+SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp handicap/evaluate_handicap.cpp main.cpp \
 	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	learn/learn.cpp mcts/montecarlo.cpp  \
 	book/file_mapping.cpp book/book.cpp book/book_manager.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp \
 	engine.cpp score.cpp memory.cpp \
-	win_probability.cpp \
+	wdl/win_probability.cpp \
 	livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp \
 	livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp \
 	livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp \
 	livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp shashin/shashin_manager.cpp
 
-HEADERS = benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h history.h pawns.h \
+HEADERS = benchmark.h bitboard.h endgame.h evaluate.hhandicap/ evaluate_handicap.h material.h misc.h movegen.h movepick.h history.h pawns.h \
 		position.h \
 		psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
 		tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h \
 		book/file_mapping.h book/book.h book/book_manager.h book/polyglot/polyglot.h book/ctg/ctg.h learn/learn.h mcts/montecarlo.h \
-		win_probability.h \
+		wdl/win_probability.h \
 		livebook/BaseLivebook.h livebook/LichessOpening.h livebook/LichessEndgame.h livebook/ChessDb.h \
 		livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h \
 		livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h \
@@ -78,7 +78,7 @@ HEADERS = benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/analysis:livebook/json
+VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/analysis:livebook/json:wdl:handicap
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -869,7 +869,7 @@ endif
 endif
 
 ### 3.10 Android 5 can only run position independent executables. Note that this
-### breaks Android 4.0 and earlier.
+### breaks Android 4.1 and earlier.
 ifeq ($(OS), Android)
 	CXXFLAGS += -fPIE
 	LDFLAGS += -fPIE -pie
@@ -998,12 +998,12 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o ./shashin/shashin_manager.o
+	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o ./shashin/shashin_manager.o ./wdl/*.o ./handicap/*.o 
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda ./shashin/*.gcda *.s PGOBENCH.out
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda ./shashin/*.gcda ./wdl/*.gcda ./handicap/*.gcda *.s PGOBENCH.out
 	@rm -f alexander.profdata *.profraw
 	@rm -f alexander.*args*
 	@rm -f alexander.*lt*

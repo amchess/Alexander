@@ -19,7 +19,7 @@ making contributions to Alexander.
 In case you do not have a C++ compiler installed, you can follow the
 instructions from our wiki.
 
-- [Linux][linux-compiling-link]
+- [Ubuntu][ubuntu-compiling-link]
 - [Windows][windows-compiling-link]
 - [macOS][macos-compiling-link]
 
@@ -86,12 +86,11 @@ more details.
 
 Thank you for contributing to Alexander and helping us make it even better!
 
-
 [copying-link]:           https://github.com/official-alexander/Alexander/blob/master/Copying.txt
 [discord-link]:           https://discord.gg/GWDRS3kU6R
 [discussions-link]:       https://github.com/official-alexander/Alexander/discussions/new
 [creating-my-first-test]: https://github.com/official-alexander/fishtest/wiki/Creating-my-first-test#create-your-test
 [issue-tracker-link]:     https://github.com/official-alexander/Alexander/issues
-[linux-compiling-link]:   https://github.com/official-alexander/Alexander/wiki/Compiling-from-source#linux
-[windows-compiling-link]: https://github.com/official-alexander/Alexander/wiki/Compiling-from-source#windows
-[macos-compiling-link]:   https://github.com/official-alexander/Alexander/wiki/Compiling-from-source#macos
+[ubuntu-compiling-link]:  https://github.com/official-alexander/Alexander/wiki/Developers#user-content-installing-a-compiler-1
+[windows-compiling-link]: https://github.com/official-alexander/Alexander/wiki/Developers#user-content-installing-a-compiler
+[macos-compiling-link]:   https://github.com/official-alexander/Alexander/wiki/Developers#user-content-installing-a-compiler-2

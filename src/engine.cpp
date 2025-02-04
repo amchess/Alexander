@@ -38,7 +38,7 @@
 #include "types.h"
 #include "uci.h"
 #include "ucioption.h"
-#include "win_probability.h"
+#include "wdl/win_probability.h"
 #include "learn/learn.h"      //learning
 #include "book/book.h"        //book management
 #include "mcts/montecarlo.h"  //mcts
@@ -125,7 +125,7 @@ Engine::Engine(std::optional<std::string> path) :
                                      Eval::initHandicapMode(get_options());
                                      return std::nullopt;
                                  });
-    options["Handicapped avatar player"] << Option(false, [this](const Option&) {
+    options["Simulate human blunders"] << Option(false, [this](const Option&) {
         Eval::initHandicapMode(get_options());
         return std::nullopt;
     });
@@ -256,7 +256,7 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-	//from classical
+    //from classical
 
     threads.start_thinking(options, pos, states, limits);
 }

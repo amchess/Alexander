@@ -6,6 +6,7 @@
 
 namespace Alexander {
 namespace WDLModel {
+const uint8_t MAX_WIN_PROBABILITY=100;
 struct WDL {       // Structure to represent Win-Draw-Loss in centipawns
     uint8_t win;   // Win percentage (0-100)
     uint8_t draw;  // Draw percentage (0-100)
@@ -20,6 +21,7 @@ uint8_t get_win_probability_by_material(
   const Value value, const int materialClamp);  // Returns the win probability using the WDL
 uint8_t get_win_probability(const Value     value,
                             const Position& pos);  // Returns the win probability given the position
+
 uint8_t
 get_win_probability(const Value value,
                     const int plies);  // Returns the win probability by using the half moves number
