@@ -280,10 +280,14 @@ void MonteCarlo::create_root(Search::Worker* worker) {
           &worker->continuationHistory[0][0][NO_PIECE][0];  // Use as a sentinel
         stack[i].continuationCorrectionHistory =
           &worker->continuationCorrectionHistory[NO_PIECE][0];
+        stack[i].staticEval = VALUE_NONE;
+        stack[i].reduction  = 0;
     }
     for (int i = 0; i <= MAX_PLY + 2; ++i)
-        stack[i].ply = i;
-
+    {
+        stack[i].ply       = i;
+        stack[i].reduction = 0;
+    }
     // TODO : what to do with killers ???
 
     // Erase the list of nodes, and set the current node to the root node
@@ -627,18 +631,19 @@ inline bool MonteCarlo::is_terminal(mctsNodeInfo* node) const {
 void MonteCarlo::do_move(const Move m) {
 
     assert(ply < MAX_PLY);
-
-    stack[ply].ply         = ply;
-    stack[ply].currentMove = m;
-    stack[ply].inCheck     = pos.checkers();
-    const bool capture     = pos.capture(m);
+    auto [ttHit, ttData, ttWriter] = tt.probe(pos.key());
+    stack[ply].ply                 = ply;
+    stack[ply].currentMove         = m;
+    stack[ply].isTTMove            = (m == ttData.move);
+    stack[ply].inCheck             = pos.checkers();
+    const bool capture             = pos.capture(m);
 
     stack[ply].continuationHistory =
       &thisThread->continuationHistory[stack[ply].inCheck][capture][pos.moved_piece(m)][m.to_sq()];
     stack[ply].continuationCorrectionHistory =
       &thisThread->continuationCorrectionHistory[pos.moved_piece(m)][m.to_sq()];
 
-    pos.do_move(m, states[ply]);
+    pos.do_move(m, states[ply], &tt);
 
     ply++;
     if (ply > maximumPly)
@@ -671,12 +676,10 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
     auto [ttHit, ttData, ttWriter] = tt.probe(pos.key());
     Depth depth                    = 30;
 
-    const PieceToHistory* contHist[] = {stack[ply - 1].continuationHistory,
-                                        stack[ply - 2].continuationHistory,
-                                        stack[ply - 3].continuationHistory,
-                                        stack[ply - 4].continuationHistory,
-                                        nullptr,
-                                        stack[ply - 6].continuationHistory};
+    const PieceToHistory* contHist[] = {
+      stack[ply - 1].continuationHistory, stack[ply - 2].continuationHistory,
+      stack[ply - 3].continuationHistory, stack[ply - 4].continuationHistory,
+      stack[ply - 5].continuationHistory, stack[ply - 6].continuationHistory};
     MovePicker mp(pos, ttData.move, depth, &thisThread->mainHistory, &thisThread->lowPlyHistory,
                   &thisThread->captureHistory, contHist, &thisThread->pawnHistory, stack[ply].ply);
     Move       move;

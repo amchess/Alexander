@@ -207,20 +207,6 @@ class Evaluation {
     // to kingAttacksCount[WHITE].
     int kingAttacksCount[COLOR_NB];
 };
-//handicap mode begin
-// apply_weight() scales score 'v' by weight 'w'
-template<Phase P>
-inline Value apply_weight(Value v, int wi) {
-    if constexpr (P == MG)
-        return v * Weights[wi].mg / 100;
-    else if constexpr (P == EG)
-        return v * Weights[wi].eg / 100;
-}
-
-inline ScoreForClassical apply_weights(ScoreForClassical s, int wi) {
-    return make_score(apply_weight<MG>(mg_value(s), wi), apply_weight<EG>(eg_value(s), wi));
-}
-//handicap mode end
 // Evaluation::initialize() computes king and pawn attacks, and the king ring
 // bitboard for a given color. This is done at the beginning of the evaluation.
 
@@ -824,7 +810,7 @@ Value Evaluation<T>::winnable(ScoreForClassical score) const {
     }
 
     ScoreForClassical w = make_score(mg, eg);
-    w                   = apply_weights(w, WINNABLE_INDEX);
+    w                   = apply_weights(w, WINNABLE_INDEX);  //handicap mode
 
     mg = mg_value(w);
     eg = eg_value(w);
@@ -871,7 +857,7 @@ Value Evaluation<T>::value() {
     ScoreForClassical score =
       apply_weights(pos.psq_score(), MATERIAL_INDEX)
       + (Alexander::Eval::imbalancesToEvaluate ? apply_weights(me->imbalance(), IMBALANCE_INDEX)
-                                               : 0);
+                                               : 0);  //handicap mode
     // Probe the pawn hash table
     pe = Pawns::probe(pos);
     if (Alexander::Eval::pawnsToEvaluate)

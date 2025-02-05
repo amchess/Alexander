@@ -67,8 +67,20 @@ struct Weight {
                         {"PassedPawns(mg)", "PassedPawns(eg)", 100, 100},
                         {"Space(mg)", "Space(eg)", 100, 100},
                         {"Winnable(mg)", "Winnable(eg)", 100, 100}};
+    template<Phase P>
+    inline Value apply_weight(Value v, int wi) {
+        if constexpr (P == MG)
+            return v * Weights[wi].mg / 100;
+        else if constexpr (P == EG)
+            return v * Weights[wi].eg / 100;
+    }
+
+    inline ScoreForClassical apply_weights(ScoreForClassical s, int wi) {
+        return make_score(apply_weight<MG>(mg_value(s), wi), apply_weight<EG>(eg_value(s), wi));
+    }
 
 }
+
 namespace Eval {
 const int   MIN_ELO             = 1320; 
 // Definizione delle costanti
