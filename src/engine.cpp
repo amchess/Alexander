@@ -179,7 +179,7 @@ Engine::Engine(std::optional<std::string> path) :
                 Option("Off var Off var Standard var Self", "Off", [this](const Option& o) {
                     if (!(o == "Off"))
                         LD.set_learning_mode(get_options(), o);
-                    return std::nullopt;
+                     return std::optional<std::string>{};
                 }));
 
     options.add("Read only learning", Option(false, [](const Option& o) {
@@ -209,14 +209,9 @@ Engine::Engine(std::optional<std::string> path) :
 
     // LiveBook options
 #ifdef USE_LIVEBOOK
-    options.add("LiveBook Proxy Url", Option("", [](const Option& o) {
+    options.add("LiveBook Proxy Url", Option("", [](const Option& o) -> std::optional<std::string> {
                     Search::set_proxy_url(o);
-                    return std::nullopt;
-                }));
-
-    options.add("LiveBook Proxy Diversity", Option(false, [](const Option& o) {
-                    Search::set_proxy_diversity(o);
-                    return std::nullopt;
+                    return std::optional<std::string>{};
                 }));
 
     options.add("LiveBook Lichess Games", Option(false, [](const Option& o) {
@@ -229,19 +224,21 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
-    options.add("LiveBook Lichess Player", Option("", [](const Option& o) {
+    options.add("LiveBook Lichess Player",
+                Option("", [](const Option& o) -> std::optional<std::string> {
                     Search::set_lichess_player(o);
-                    return std::nullopt;
+                    return std::optional<std::string>{};
                 }));
 
     options.add("LiveBook Lichess Player Color",
-                Option("White var Both var White var Black", "White", [](const Option& o) {
-                    std::string str = o;
-                    std::transform(str.begin(), str.end(), str.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
-                    Search::set_lichess_player_color(str);
-                    return std::nullopt;
-                }));
+                Option("White var Both var White var Black", "White",
+                       [](const Option& o) -> std::optional<std::string> {
+                           std::string str = o;
+                           std::transform(str.begin(), str.end(), str.begin(),
+                                          [](const unsigned char c) { return std::tolower(c); });
+                           Search::set_lichess_player_color(str);
+                           return std::optional<std::string>{};
+                       }));
 
     options.add("LiveBook ChessDB", Option(false, [](const Option& o) {
                     Search::set_use_chess_db(o);
@@ -269,11 +266,11 @@ Engine::Engine(std::optional<std::string> path) :
                 }));
 #endif
 
-    options.add("Variety",
-                Option("Off var Off var Standard var Psychological", "Off", [](const Option& o) {
-                    Search::set_variety(o);
-                    return std::nullopt;
-                }));
+    options.add("Variety", Option("Off var Off var Standard var Psychological", "Off",
+                                  [](const Option& o) -> std::optional<std::string> {
+                                      Search::set_variety(o);
+                                      return std::optional<std::string>{};
+                                  }));
 
     options.add("Concurrent Experience", Option(false));
 

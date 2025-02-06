@@ -27,6 +27,7 @@
 #include <utility>
 
 #include "misc.h"
+#include <set>  //combo management
 
 namespace Alexander {
 
@@ -66,22 +67,37 @@ const Option& OptionsMap::operator[](const std::string& name) const {
 
 // Inits options and assigns idx in the correct printing order
 void OptionsMap::add(const std::string& name, const Option& option) {
-    if (!options_map.count(name))
+    //combo management begin
+    auto it = options_map.find(name);
+
+    if (it == options_map.end())  // Se l'opzione NON esiste ancora, la aggiungiamo
     {
         static size_t insert_order = 0;
-
-        options_map[name] = option;
-
-        options_map[name].parent = this;
-        options_map[name].idx    = insert_order++;
+        options_map[name]          = option;
+        options_map[name].parent   = this;
+        options_map[name].idx      = insert_order++;
     }
     else
     {
+        const Option& existingOption = it->second;
+	    if (existingOption.type == "combo" && option.type == "combo")
+        {
+            if (existingOption.defaultValue == option.defaultValue)
+            {
+                return;
+            }
+            else
+            {
+                options_map[name] = option;
+                return;
+            }
+        }
+
         std::cerr << "Option \"" << name << "\" was already added!" << std::endl;
         std::exit(EXIT_FAILURE);
     }
+    //combo management end
 }
-
 
 std::size_t OptionsMap::count(const std::string& name) const { return options_map.count(name); }
 
@@ -133,7 +149,7 @@ Option::operator int() const {
 }
 
 Option::operator std::string() const {
-    assert(type == "string" || type == "combo");  //Alexander
+    assert(type == "string" || type == "combo");  //combo
     return currentValue;
 }
 
@@ -151,21 +167,26 @@ bool Option::operator!=(const char* s) const { return !(*this == s); }
 Option& Option::operator=(const std::string& v) {
 
     assert(!type.empty());
-
+    //combo management begin
     if ((type != "button" && type != "string" && v.empty())
         || (type == "check" && v != "true" && v != "false")
         || (type == "spin" && (std::stof(v) < min || std::stof(v) > max)))
+    {
         return *this;
+    }
 
     if (type == "combo")
     {
-        OptionsMap         comboMap;  // To have case insensitive compare
-        std::string        token;
-        std::istringstream ss(defaultValue);
+        std::set<std::string, CaseInsensitiveLess> comboSet;
+        std::istringstream                         ss(defaultValue);
+        std::string                                token;
+
         while (ss >> token)
-            comboMap.add(token, Option());
-        if (!comboMap.count(v) || v == "var")
+            if (token != "var")
+                comboSet.insert(token);
+        if (!comboSet.count(v))
             return *this;
+        //combo management end
     }
 
     if (type == "string")
