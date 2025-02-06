@@ -2039,15 +2039,14 @@ moves_loop:  // When in check, search starts here
                 }
             }
             //Shashin-Crystal end
-
+skipExtensionAndPruning:  // full threads search patch
             // Step 16. Make the move
             pos.do_move(move, st, givesCheck, &tt);
+            bool doLMRStep = !(thisThread->fullSearch);  // full threads patch
             thisThread->nodes.fetch_add(1, std::memory_order_relaxed);
 
             // Add extension to new depth
             newDepth += extension;
-
-skipExtensionAndPruning:  // full threads search patch
 
             // Update the current move (this must be done after singular extension search)
             ss->currentMove = move;
@@ -2057,7 +2056,6 @@ skipExtensionAndPruning:  // full threads search patch
             ss->continuationCorrectionHistory =
               &thisThread->continuationCorrectionHistory[movedPiece][move.to_sq()];
             nodeCount      = rootNode ? uint64_t(nodes) : 0;
-            bool doLMRStep = !(thisThread->fullSearch);  // full threads patch
             // Decrease reduction for PvNodes (*Scaler)
             if (ss->ttPv)
                 r -= 2230 + (ttData.value > alpha) * 925 + (ttData.depth >= depth) * 971;
