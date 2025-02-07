@@ -137,12 +137,14 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
-    options.add("Handicapped Depth", Option(false, [this](const Option&) {
+    options.add("Handicapped Depth",
+                Option(false, [this](const Option&) -> std::optional<std::string> {
                     Eval::initHandicapMode(get_options());
                     return std::nullopt;
                 }));
 
-    options.add("UCI_Elo", Option(3190, 1320, 3190, [this](const Option&) {
+    options.add("UCI_Elo",
+                Option(3190, 1320, 3190, [this](const Option&) -> std::optional<std::string> {
                     Eval::initHandicapMode(get_options());
                     return std::nullopt;
                 }));
@@ -163,7 +165,8 @@ Engine::Engine(std::optional<std::string> path) :
                     return std::nullopt;
                 }));
 
-    options.add("ELO_CB", Option(3190, 1320, 3190, [this](const Option&) {
+    options.add("ELO_CB",
+                Option(3190, 1320, 3190, [this](const Option&) -> std::optional<std::string> {
                     Eval::initHandicapMode(get_options());
                     return std::nullopt;
                 }));
@@ -179,7 +182,7 @@ Engine::Engine(std::optional<std::string> path) :
                 Option("Off var Off var Standard var Self", "Off", [this](const Option& o) {
                     if (!(o == "Off"))
                         LD.set_learning_mode(get_options(), o);
-                     return std::optional<std::string>{};
+                    return std::optional<std::string>{};
                 }));
 
     options.add("Read only learning", Option(false, [](const Option& o) {

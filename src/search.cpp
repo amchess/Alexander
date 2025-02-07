@@ -2055,7 +2055,7 @@ skipExtensionAndPruning:  // full threads search patch
               &thisThread->continuationHistory[ss->inCheck][capture][movedPiece][move.to_sq()];
             ss->continuationCorrectionHistory =
               &thisThread->continuationCorrectionHistory[movedPiece][move.to_sq()];
-            nodeCount      = rootNode ? uint64_t(nodes) : 0;
+            nodeCount = rootNode ? uint64_t(nodes) : 0;
             // Decrease reduction for PvNodes (*Scaler)
             if (ss->ttPv)
                 r -= 2230 + (ttData.value > alpha) * 925 + (ttData.depth >= depth) * 971;

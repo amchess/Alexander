@@ -80,7 +80,7 @@ void OptionsMap::add(const std::string& name, const Option& option) {
     else
     {
         const Option& existingOption = it->second;
-	    if (existingOption.type == "combo" && option.type == "combo")
+        if (existingOption.type == "combo" && option.type == "combo")
         {
             if (existingOption.defaultValue == option.defaultValue)
             {
