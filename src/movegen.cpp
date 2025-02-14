@@ -171,15 +171,19 @@ ExtMove* generate_moves(const Position& pos, ExtMove* moveList, Bitboard target)
             {
                 Square to = pop_lsb(b);
 
-                // La condizione è stata ottimizzata per chiarezza e leggibilità
+                // La condizione e' stata ottimizzata per chiarezza e leggibilitï¿½
                 if (!(blockers_for_king & from) || aligned(from, to, ksq))
-                { *moveList++ = Move(from, to); }
+                {
+                    *moveList++ = Move(from, to);
+                }
             }
         }
         else
         {
             while (b)
-            { *moveList++ = Move(from, pop_lsb(b)); }
+            {
+                *moveList++ = Move(from, pop_lsb(b));
+            }
         }
     }
     //from shashin-crystal end
@@ -215,7 +219,7 @@ ExtMove* generate_all(const Position& pos, ExtMove* moveList) {
     {
         Square to = pop_lsb(b);
 
-        // Aggiunge la logica Crystal solo se useCrystalLogic è attivo
+        // Aggiunge la logica Crystal solo se useCrystalLogic e' attivo
         if (!MoveGenConfig::useMoveGenCrystalLogic || (pos.attackers_to(to) & pos.pieces(~Us)) == 0)
             *moveList++ = Move(ksq, to);
     }

@@ -38,6 +38,7 @@
 
     #include <cassert>
     #include <cstdint>
+    #include <cstddef>  //Mac build
 
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
@@ -93,13 +94,13 @@ constexpr bool HasPopCnt = false;
     #ifdef USE_PEXT
 constexpr bool HasPext = true;
     #else
-constexpr bool HasPext   = false;
+constexpr bool HasPext = false;
     #endif
 
     #ifdef IS_64BIT
 constexpr bool Is64Bit = true;
     #else
-constexpr bool Is64Bit   = false;
+constexpr bool Is64Bit = false;
     #endif
 
 using Key      = uint64_t;
@@ -211,7 +212,7 @@ constexpr Value QueenValueEg  = 2682;
 constexpr Value MidgameLimit  = 15258;
 constexpr Value EndgameLimit  = 3915;
 //from classical eval end
-constexpr Value RandomValue          = 1200;  //handicap mode Michael Byrne
+constexpr Value RandomValue = 1200;  //handicap mode Michael Byrne
 //from Crystal begin
 constexpr Value PawnConversionFactor = 356;
 constexpr Value VALUE_TB_WIN         = 51 * PawnConversionFactor;

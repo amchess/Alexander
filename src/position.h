@@ -46,7 +46,6 @@ struct StateInfo {
     // Copied when making a move
     Key    materialKey;
     Key    pawnKey;
-    Key    majorPieceKey;
     Key    minorPieceKey;
     Key    nonPawnKey[COLOR_NB];
     Value  nonPawnMaterial[COLOR_NB];
@@ -150,8 +149,8 @@ class Position {
     int  pawns_on_same_color_squares(Color c, Square s) const;
     //for classical end
     // Doing and undoing moves
-    void do_move(Move m, StateInfo& newSt);
-    void do_move(Move m, StateInfo& newSt, bool givesCheck);
+    void do_move(Move m, StateInfo& newSt, const TranspositionTable* tt);
+    void do_move(Move m, StateInfo& newSt, bool givesCheck, const TranspositionTable* tt);
     void undo_move(Move m);
     void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
     void undo_null_move();
@@ -161,10 +160,8 @@ class Position {
 
     // Accessing hash keys
     Key key() const;
-    Key key_after(Move m) const;
     Key material_key() const;
     Key pawn_key() const;
-    Key major_piece_key() const;
     Key minor_piece_key() const;
     Key non_pawn_key(Color c) const;
 
@@ -174,6 +171,7 @@ class Position {
     bool    is_chess960() const;
     Thread* this_thread() const;  //for classical
     bool    is_draw(int ply) const;
+    bool    is_repetition(int ply) const;
     bool    upcoming_repetition(int ply) const;
     bool    has_repeated() const;
     //from Crystal begin
@@ -334,8 +332,6 @@ inline Key Position::material_key() const { return st->materialKey; }
 
 inline ScoreForClassical Position::psq_score() const { return psq; }  //for classical
 
-inline Key Position::major_piece_key() const { return st->majorPieceKey; }
-
 inline Key Position::minor_piece_key() const { return st->minorPieceKey; }
 
 inline Key Position::non_pawn_key(Color c) const { return st->nonPawnKey[c]; }
@@ -408,7 +404,9 @@ inline void Position::move_piece(Square from, Square to) {
     psq += PSQT::psq[pc][to] - PSQT::psq[pc][from];  //for classical
 }
 
-inline void Position::do_move(Move m, StateInfo& newSt) { do_move(m, newSt, gives_check(m)); }
+inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable* tt = nullptr) {
+    do_move(m, newSt, gives_check(m), tt);
+}
 
 inline StateInfo* Position::state() const { return st; }
 

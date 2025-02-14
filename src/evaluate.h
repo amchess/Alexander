@@ -19,28 +19,15 @@
 #ifndef EVALUATE_H_INCLUDED
 #define EVALUATE_H_INCLUDED
 
-#include <string>
-#include <unordered_map>  //for classical
-
-#include "types.h"
-
+#include "handicap/evaluate_handicap.h"
 namespace Alexander {
 
 class Position;
 class OptionsMap;  //for classical
 
 namespace Eval {
-
 std::string trace(Position& pos);  //for classical
-
-//true handicap mode begin
-extern bool limitStrength, pawnsToEvaluate, winnableToEvaluate, imbalancesToEvaluate,
-  handicappedAvatarPlayer, handicappedDepth;
-extern int uciElo, RandomEvalPerturb;
-Value      evaluate(const Position& pos);
-void       loadAvatar(const std::string& fname);  //avatar
-void       initHandicapMode(const OptionsMap&);   //handicap mode
-//true handicap mode end
+Value       evaluate(const Position& pos);
 
 }  // namespace Eval
 

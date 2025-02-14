@@ -14,24 +14,24 @@ set(PREFIX /usr/local)
 set(BINDIR ${PREFIX}/bin)
 
 # Source and header files
-set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp main.cpp
+set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp handicap/evaluate_handicap.cpp  main.cpp
         material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
         learn/learn.cpp mcts/montecarlo.cpp
         book/file_mapping.cpp book/book.cpp book/book_manager.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp
         engine.cpp score.cpp memory.cpp
-        win_probability.cpp
+        wdl/win_probability.cpp
         livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp
         livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp
         livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp
         livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp) shashin/shashin_manager.cpp
 
-set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h material.h misc.h movegen.h movepick.h history.h pawns.h
+set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h handicap/evaluate_handicap.h material.h misc.h movegen.h movepick.h history.h pawns.h
         position.h
         psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h
         tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h
         book/file_mapping.h book/book.h book/book_manager.h book/polyglot/polyglot.h book/ctg/ctg.h learn/learn.h mcts/montecarlo.h
-        win_probability.h
+        wdl/win_probability.h
         livebook/BaseLivebook.h livebook/LichessOpening.h livebook/LichessEndgame.h livebook/ChessDb.h
         livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h
         livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h

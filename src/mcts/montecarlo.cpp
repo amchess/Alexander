@@ -201,7 +201,7 @@ void MonteCarlo::search(Alexander::ThreadPool&        threads,
     mctsNodeInfo* node = nullptr;
     AB_Rollout         = false;
     Reward reward      = value_to_reward(
-           VALUE_DRAW);  //TODO: Perhaps we should use static_value() here instead of 'VALUE_DRAW'
+      VALUE_DRAW);  //TODO: Perhaps we should use static_value() here instead of 'VALUE_DRAW'
 
     while (computational_budget(threads, limits) && (node = tree_policy(threads, limits)))
     {
@@ -229,7 +229,9 @@ void MonteCarlo::search(Alexander::ThreadPool&        threads,
                 maximumPly = ply;
         }
         else
-        { reward = playout_policy(node); }
+        {
+            reward = playout_policy(node);
+        }
 
         if (ply >= 1)
             node->ttValue = backup(reward, AB_Rollout);
@@ -278,10 +280,14 @@ void MonteCarlo::create_root(Search::Worker* worker) {
           &worker->continuationHistory[0][0][NO_PIECE][0];  // Use as a sentinel
         stack[i].continuationCorrectionHistory =
           &worker->continuationCorrectionHistory[NO_PIECE][0];
+        stack[i].staticEval = VALUE_NONE;
+        stack[i].reduction  = 0;
     }
     for (int i = 0; i <= MAX_PLY + 2; ++i)
-        stack[i].ply = i;
-
+    {
+        stack[i].ply       = i;
+        stack[i].reduction = 0;
+    }
     // TODO : what to do with killers ???
 
     // Erase the list of nodes, and set the current node to the root node
@@ -314,7 +320,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(Alexander::ThreadPool&        threads,
     assert(ply == 1);
 
     if (root->number_of_sons == 0)
-    { return root; }
+    {
+        return root;
+    }
 
     mctsNodeInfo* node = nullptr;
     while ((node = nodes[ply]))
@@ -354,7 +362,9 @@ mctsNodeInfo* MonteCarlo::tree_policy(Alexander::ThreadPool&        threads,
         const size_t greedy = TRand<size_t>(0, 100);
         if (!is_root(node) && node->ttValue < VALUE_KNOWN_WIN && node->ttValue > -VALUE_KNOWN_WIN
             && (node->number_of_sons > 5 && greedy >= mctsMultiStrategy))
-        { AB_Rollout = true; }
+        {
+            AB_Rollout = true;
+        }
     }
 
     return node;
@@ -621,18 +631,19 @@ inline bool MonteCarlo::is_terminal(mctsNodeInfo* node) const {
 void MonteCarlo::do_move(const Move m) {
 
     assert(ply < MAX_PLY);
-
-    stack[ply].ply         = ply;
-    stack[ply].currentMove = m;
-    stack[ply].inCheck     = pos.checkers();
-    const bool capture     = pos.capture(m);
+    auto [ttHit, ttData, ttWriter] = tt.probe(pos.key());
+    stack[ply].ply                 = ply;
+    stack[ply].currentMove         = m;
+    stack[ply].isTTMove            = (m == ttData.move);
+    stack[ply].inCheck             = pos.checkers();
+    const bool capture             = pos.capture(m);
 
     stack[ply].continuationHistory =
       &thisThread->continuationHistory[stack[ply].inCheck][capture][pos.moved_piece(m)][m.to_sq()];
     stack[ply].continuationCorrectionHistory =
       &thisThread->continuationCorrectionHistory[pos.moved_piece(m)][m.to_sq()];
 
-    pos.do_move(m, states[ply]);
+    pos.do_move(m, states[ply], &tt);
 
     ply++;
     if (ply > maximumPly)
@@ -665,12 +676,10 @@ void MonteCarlo::generate_moves(mctsNodeInfo* node) {
     auto [ttHit, ttData, ttWriter] = tt.probe(pos.key());
     Depth depth                    = 30;
 
-    const PieceToHistory* contHist[] = {stack[ply - 1].continuationHistory,
-                                        stack[ply - 2].continuationHistory,
-                                        stack[ply - 3].continuationHistory,
-                                        stack[ply - 4].continuationHistory,
-                                        nullptr,
-                                        stack[ply - 6].continuationHistory};
+    const PieceToHistory* contHist[] = {
+      stack[ply - 1].continuationHistory, stack[ply - 2].continuationHistory,
+      stack[ply - 3].continuationHistory, stack[ply - 4].continuationHistory,
+      stack[ply - 5].continuationHistory, stack[ply - 6].continuationHistory};
     MovePicker mp(pos, ttData.move, depth, &thisThread->mainHistory, &thisThread->lowPlyHistory,
                   &thisThread->captureHistory, contHist, &thisThread->pawnHistory, stack[ply].ply);
     Move       move;
@@ -823,9 +832,13 @@ double MonteCarlo::ucb(const Edge* edge, long fatherVisits, bool priorMode) cons
     double result = 0.0;
     if (((mctsThreads > 1) && (edge->visits > mctsMultiMinVisits))
         || ((mctsThreads == 1) && edge->visits))
-    { result += edge->meanActionValue; }
+    {
+        result += edge->meanActionValue;
+    }
     else
-    { result += UCB_UNEXPANDED_NODE; }
+    {
+        result += UCB_UNEXPANDED_NODE;
+    }
 
     const double C =
       UCB_USE_FATHER_VISITS ? exploration_constant() * sqrt(fatherVisits) : exploration_constant();

@@ -20,39 +20,19 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstdlib>
-#include <fstream>
 #include <iomanip>
-#include <iostream>
-#include <optional>
 #include <sstream>
-#include <unordered_map>
-#include <vector>
-
-#include "misc.h"
+#include "handicap/evaluate_handicap.h"
 #include "position.h"
 #include "types.h"
 #include "uci.h"
-#include "ucioption.h"
 #include "pawns.h"
 #include "bitboard.h"
 #include "material.h"
 #include <cstring>  // For std::memset
-#include <random>   //from Handicap mode
-
+#include <string>
 namespace Alexander {
-
-namespace Eval {
-
-//true handicap mode begin
-bool limitStrength, pawnsToEvaluate, winnableToEvaluate, imbalancesToEvaluate,
-  handicappedAvatarPlayer, handicappedDepth;
-int uciElo, RandomEvalPerturb = 0;
-//true handicap mode end
-
-
-}
 
 namespace Trace {
 
@@ -97,44 +77,7 @@ constexpr int KingAttackWeights[PIECE_TYPE_NB] = {0, 0, 76, 46, 45, 14};
 // SafeCheck[PieceType][single/multiple] contains safe check bonus by piece type,
 // higher if multiple safe checks are possible for that piece type.
 constexpr int SafeCheck[][2] = {{}, {}, {805, 1292}, {650, 984}, {1071, 1886}, {730, 1128}};
-//handicap mode begin
-// Evaluation weights, initialized from UCI options
-enum {
-    MATERIAL_INDEX = 0,
-    IMBALANCE_INDEX,
-    PAWN_STRUCTURE_INDEX,
-    KNIGHT_INDEX,
-    BISHOP_INDEX,
-    ROOK_INDEX,
-    QUEEN_INDEX,
-    MOBILITY_INDEX,
-    KING_SAFETY_INDEX,
-    THREATS_INDEX,
-    PASSED_PAWN_INDEX,
-    SPACE_INDEX,
-    WINNABLE_INDEX,
-    AVATAR_NB
-};
-struct Weight {
-    std::string mgName;
-    std::string egName;
-    int         mg, eg;
-} Weights[AVATAR_NB] = {{"Material(mg)", "Material(eg)", 100, 100},
-                        {"Imbalance(mg)", "Imbalance(eg)", 100, 100},
-                        {"PawnStructure(mg)", "PawnStructure(eg)", 100, 100},
-                        {"Knight(mg)", "Knight(eg)", 100, 100},
-                        {"Bishop(mg)", "Bishop(eg)", 100, 100},
-                        {"Rook(mg)", "Rook(eg)", 100, 100},
-                        {"Queen(mg)", "Queen(eg)", 100, 100},
-                        {"Mobility(mg)", "Mobility(eg)", 100, 100},
-                        {"KingSafety(mg)", "KingSafety(eg)", 100, 100},
-                        {"Threats(mg)", "Threats(eg)", 100, 100},
-                        {"PassedPawns(mg)", "PassedPawns(eg)", 100, 100},
-                        {"Space(mg)", "Space(eg)", 100, 100},
-                        {"Winnable(mg)", "Winnable(eg)", 100, 100}};
-
 #define S(mg, eg) make_score(mg, eg)
-//handicap mode end
 
 // MobilityBonus[PieceType-2][attacked] contains bonuses for middle and end game,
 // indexed by piece type and number of attacked squares in the mobility area.
@@ -202,14 +145,11 @@ constexpr ScoreForClassical ThreatBySafePawn    = S(167, 99);
 constexpr ScoreForClassical TrappedRook         = S(55, 13);
 constexpr ScoreForClassical WeakQueenProtection = S(14, 0);
 constexpr ScoreForClassical WeakQueen           = S(57, 19);
-
-
 #undef S
 
 // Evaluation class computes and stores attacks tables and other working data
 template<Tracing T>
 class Evaluation {
-
    public:
     Evaluation() = delete;
     explicit Evaluation(const Position& p) :
@@ -231,7 +171,6 @@ class Evaluation {
     template<Color Us>
     ScoreForClassical space() const;
     Value             winnable(ScoreForClassical score) const;
-
     const Position&   pos;
     Material::Entry*  me;
     Pawns::Entry*     pe;
@@ -268,20 +207,6 @@ class Evaluation {
     // to kingAttacksCount[WHITE].
     int kingAttacksCount[COLOR_NB];
 };
-//handicap mode begin
-// apply_weight() scales score 'v' by weight 'w'
-template<Phase P>
-inline Value apply_weight(Value v, int wi) {
-    if constexpr (P == MG)
-        return v * Weights[wi].mg / 100;
-    else if constexpr (P == EG)
-        return v * Weights[wi].eg / 100;
-}
-
-inline ScoreForClassical apply_weights(ScoreForClassical s, int wi) {
-    return make_score(apply_weight<MG>(mg_value(s), wi), apply_weight<EG>(eg_value(s), wi));
-}
-//handicap mode end
 // Evaluation::initialize() computes king and pawn attacks, and the king ring
 // bitboard for a given color. This is done at the beginning of the evaluation.
 
@@ -830,7 +755,7 @@ Value Evaluation<T>::winnable(ScoreForClassical score) const {
     int v = ((eg > 0) - (eg < 0)) * std::max(complexity, -abs(eg));
 
     //Handicap Mode begin
-    if (Alexander::Eval::winnableToEvaluate)
+    if (Alexander::Eval::handicapConfig.winnableToEvaluate)
     {
         mg += u;
         eg += v;
@@ -885,7 +810,7 @@ Value Evaluation<T>::winnable(ScoreForClassical score) const {
     }
 
     ScoreForClassical w = make_score(mg, eg);
-    w                   = apply_weights(w, WINNABLE_INDEX);
+    w                   = apply_weights(w, WINNABLE_INDEX);  //handicap mode
 
     mg = mg_value(w);
     eg = eg_value(w);
@@ -929,13 +854,13 @@ Value Evaluation<T>::value() {
     // the position object (material + piece square tables) and the material
     // imbalance. ScoreForClassical is computed internally from the white point of view.
     //from handicap mode begin
-    ScoreForClassical score =
-      apply_weights(pos.psq_score(), MATERIAL_INDEX)
-      + (Alexander::Eval::imbalancesToEvaluate ? apply_weights(me->imbalance(), IMBALANCE_INDEX)
-                                               : 0);
+    ScoreForClassical score = apply_weights(pos.psq_score(), MATERIAL_INDEX)
+                            + (Alexander::Eval::handicapConfig.imbalancesToEvaluate
+                                 ? apply_weights(me->imbalance(), IMBALANCE_INDEX)
+                                 : 0);  //handicap mode
     // Probe the pawn hash table
     pe = Pawns::probe(pos);
-    if (Alexander::Eval::pawnsToEvaluate)
+    if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
         score += apply_weights(pe->pawn_score(WHITE) - pe->pawn_score(BLACK), PAWN_STRUCTURE_INDEX);
     }
@@ -955,22 +880,19 @@ Value Evaluation<T>::value() {
     initialize<BLACK>();
 
     //from handicap mode begin
-    if (Alexander::Eval::pawnsToEvaluate)
-    {
-        // Pieces evaluated first (also populates attackedBy, attackedBy2).
-        // Note that the order of evaluation of the terms is left unspecified.
-        score += apply_weights(pieces<WHITE, KNIGHT>() - pieces<BLACK, KNIGHT>(), KNIGHT_INDEX)
-               + apply_weights(pieces<WHITE, BISHOP>() - pieces<BLACK, BISHOP>(), BISHOP_INDEX)
-               + apply_weights(pieces<WHITE, ROOK>() - pieces<BLACK, ROOK>(), ROOK_INDEX)
-               + apply_weights(pieces<WHITE, QUEEN>() - pieces<BLACK, QUEEN>(), QUEEN_INDEX);
-    }
+    // Pieces evaluated first (also populates attackedBy, attackedBy2).
+    // Note that the order of evaluation of the terms is left unspecified.
+    score += apply_weights(pieces<WHITE, KNIGHT>() - pieces<BLACK, KNIGHT>(), KNIGHT_INDEX)
+           + apply_weights(pieces<WHITE, BISHOP>() - pieces<BLACK, BISHOP>(), BISHOP_INDEX)
+           + apply_weights(pieces<WHITE, ROOK>() - pieces<BLACK, ROOK>(), ROOK_INDEX)
+           + apply_weights(pieces<WHITE, QUEEN>() - pieces<BLACK, QUEEN>(), QUEEN_INDEX);
     score += apply_weights(mobility[WHITE] - mobility[BLACK], MOBILITY_INDEX);
     //from handicap mode end
     // More complex interactions that require fully populated attack bitboards
     score += apply_weights(king<WHITE>() - king<BLACK>(), KING_SAFETY_INDEX);
 
     //from handicap mode begin
-    if (Alexander::Eval::pawnsToEvaluate)
+    if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
         score += apply_weights(passed<WHITE>() - passed<BLACK>(), PASSED_PAWN_INDEX);
     }
@@ -1003,52 +925,42 @@ make_v:
 
     return v;
 }
-
-}  // namespace Eval
-
-
-// Evaluate is the evaluator for the outer world. It returns a static evaluation
-// of the position from the point of view of the side to move.
-Value Eval::evaluate(const Position& pos) {
+}
+namespace Eval {
+Value evaluate(const Position& pos) {
 
     assert(!pos.checkers());
-    //from handicap mode Michael Byrne begin
-    static thread_local std::mt19937_64 tls_rng = []() { return std::mt19937_64(std::time(0)); }();
-    //from handicap mode Michael Byrne end
 
+    // Evaluate the position without trace
     Value v = Evaluation<NO_TRACE>(pos).value();
-    // Damp down the evaluation linearly when shuffling
+
+    // Damp down the evaluation linearly when shuffling (rule50 count)
     int shuffling = pos.rule50_count();
     v             = v * (200 - shuffling) / 214;
-    //from handicap mode Michael Byrne begin
-    if (limitStrength && handicappedAvatarPlayer)
+
+    // If the engine is in handicap mode
+    if (handicapConfig.limitStrength && handicapConfig.simulateHumanBlunders)
     {
-        RandomEvalPerturb = (-10 * uciElo + 31900) / 319;
-        std::normal_distribution<float> d(0.0, RandomValue);
-        float                           r = d(tls_rng);
-        r = std::clamp<float>(r, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-        v = (RandomEvalPerturb * Value(r) + (100 - RandomEvalPerturb) * v) / 100;
+        v = get_perturbated_value(pos, v);
     }
-    //from handicap mode Michael Byrne end
+
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
-    return v;
+    return v;  // Returns final evaluation
 }
-
-#include <string>
-#include <sstream>
-#include <iomanip>
-
+}  // namespace Eval
 // Helper function to format a table row
-static void append_term_row(std::stringstream& ss, const char* term_name, int term, const Position& pos) {
-    ss << " " << std::setw(12) << term_name << " | "
-       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][WHITE]), pos) << " "
-       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE]), pos) << " | "
-       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][BLACK]), pos) << " "
-       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][BLACK]), pos) << " | "
-       << std::setw(5) << UCIEngine::to_cp(mg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " "
-       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " |\n";
+static void
+append_term_row(std::stringstream& ss, const char* term_name, int term, const Position& pos) {
+    ss << " " << std::setw(12) << term_name << " | " << std::setw(5)
+       << UCIEngine::to_cp(mg_value(scores[term][WHITE]), pos) << " " << std::setw(5)
+       << UCIEngine::to_cp(eg_value(scores[term][WHITE]), pos) << " | " << std::setw(5)
+       << UCIEngine::to_cp(mg_value(scores[term][BLACK]), pos) << " " << std::setw(5)
+       << UCIEngine::to_cp(eg_value(scores[term][BLACK]), pos) << " | " << std::setw(5)
+       << UCIEngine::to_cp(mg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " "
+       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE] - scores[term][BLACK]), pos)
+       << " |\n";
 }
 // Like evaluate(), but instead of returning a value, it returns
 // a string (suitable for outputting to stdout) that contains the detailed
@@ -1098,84 +1010,5 @@ std::string Eval::trace(Position& pos) {
     return ss.str();
 }
 
-//handicap mode begin
-namespace Eval {
 
-// init the true handicap mode
-void initHandicapMode(const OptionsMap& options) {
-    //true handicap mode begin
-    limitStrength = options["UCI_LimitStrength"] || options["LimitStrength_CB"];
-    uciElo        = limitStrength ? std::min((int) (options["UCI_Elo"]), (int) (options["ELO_CB"]))
-                                  : (int) (3190);
-    pawnsToEvaluate      = limitStrength ? (uciElo >= 2000) : 1;
-    winnableToEvaluate   = limitStrength ? (uciElo >= 2200) : 1;
-    imbalancesToEvaluate = limitStrength ? (uciElo >= 2400) : 1;
-    handicappedAvatarPlayer =
-      Eval::limitStrength ? (bool) options["Handicapped avatar player"] : false;
-    handicappedDepth = options["Handicapped Depth"];
-    //true handicap mode end
-}
-// load() reads avatar values
-void loadAvatar(const std::string& fname) {
-
-    if (fname.empty())
-        return;
-
-    std::ifstream file(fname);
-    if (!file)
-    {
-        std::cerr << "Unable to open avatar file: " << Util::map_path(fname) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-
-    using WeightsMap = std::map<std::string, int, CaseInsensitiveLess>;
-    WeightsMap weightsProperties;
-
-    //Read weights from Avatar file into a map
-    std::string line;
-    while (std::getline(file, line))
-    {
-
-        size_t delimiterPos;
-        if (line.empty() || line[0] == '#' || (delimiterPos = line.find('=')) == std::string::npos)
-        {
-            continue;  // Ignora righe vuote o commenti
-        }
-
-        std::string wName  = line.substr(0, delimiterPos);
-        std::string wValue = line.substr(delimiterPos + 1);
-
-        try
-        {
-            int value = std::stoi(wValue);
-            if (value < 0 || value > 100)
-                throw;
-
-            weightsProperties[wName] = value;
-        } catch (...)
-        {
-            std::cerr << "Avatar option '" << wName << "' with a non weight value: " << wValue
-                      << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    file.close();
-    if (!fname.empty())
-    {
-        sync_cout << "info string Avatar file " << fname << " loaded successfully" << sync_endl;
-    }
-    //Assign to Weights array
-    WeightsMap::const_iterator it;
-    for (int i = 0; i < AVATAR_NB; ++i)
-    {
-        if ((it = weightsProperties.find(Weights[i].mgName)) != weightsProperties.end())
-            Weights[i].mg = it->second;
-
-        if ((it = weightsProperties.find(Weights[i].egName)) != weightsProperties.end())
-            Weights[i].eg = it->second;
-    }
-}
-}
-//handicap mode end
 }  // namespace Alexander

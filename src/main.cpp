@@ -28,7 +28,7 @@
 #include "position.h"
 #include "uci.h"
 #include "tune.h"
-#include "win_probability.h"
+#include "wdl/win_probability.h"
 #include "learn/learn.h"  //learning
 using namespace Alexander;
 

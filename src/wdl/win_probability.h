@@ -1,11 +1,12 @@
 #ifndef WIN_PROBABILITY_H
 #define WIN_PROBABILITY_H
 #include <cstdint>
-#include "position.h"
-#include "types.h"
+#include "../position.h"
+#include "../types.h"
 
 namespace Alexander {
 namespace WDLModel {
+const uint8_t MAX_WIN_PROBABILITY = 100;
 struct WDL {       // Structure to represent Win-Draw-Loss in centipawns
     uint8_t win;   // Win percentage (0-100)
     uint8_t draw;  // Draw percentage (0-100)

@@ -79,11 +79,14 @@ struct Stack {
     bool                        ttPv;
     bool                        ttHit;
     int                         cutoffCnt;
+    int                         reduction;
+    bool                        isTTMove;
     //from Crystal-shashin begin
     bool secondaryLine;
     bool mainLine;
     //from Crystal-shashin end
 };
+
 
 // RootMove struct is used for moves at the root of the tree. For each root move
 // we store a score and a PV (really a refutation in the case of moves which
@@ -272,7 +275,6 @@ class Worker {
     PawnHistory           pawnHistory;
 
     CorrectionHistory<Pawn>         pawnCorrectionHistory;
-    CorrectionHistory<Major>        majorPieceCorrectionHistory;
     CorrectionHistory<Minor>        minorPieceCorrectionHistory;
     CorrectionHistory<NonPawn>      nonPawnCorrectionHistory[COLOR_NB];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
@@ -333,13 +335,15 @@ class Worker {
     //From PolyFish begin
     BookManager& bookMan;
     //From PolyFish end
-    const OptionsMap&   options;
-    ThreadPool&         threads;
-    TranspositionTable& tt;
+    const OptionsMap&               options;
+    ThreadPool&                     threads;
+    TranspositionTable&             tt;
     std::unique_ptr<ShashinManager> shashinManager;  //Shashin
+    //no classical
     friend class Alexander::ThreadPool;
     friend class SearchManager;
 };
+
 struct ConthistBonus {
     int index;
     int weight;

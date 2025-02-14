@@ -131,7 +131,7 @@ Internally the UCI_Elo value will be converted to a Strength value according to 
 - _beginner: elo < 2000_
 - _intermediate: 2000 <= elo < 2200_
 - _advanced: 2200 <= elo < 2400_
-- _expert: elo > 2400_
+- _expert: elo >= 2400_
 
 Every school corresponds to a different evaluation function, more and more refined.
 The UCI_Elo feature is controlled by the chess GUI, and usually doesn't appear in the configuration
@@ -147,7 +147,7 @@ Elo range     | Handicapped Depth |
 | [2200,2399] | [10,12]           |
 | [2400,3190] | [13,20]           |
 
-#### Handicapped avatar player
+#### Simulate human blunders
 If enabled, the engine not only simulates the thought process of a player of a certain level but also the mistakes he can make. These mistakes become more frequent the lower the player's Elo rating. This is the handicap mode implemented by Stockfish, but when combined with the previous options that simulate a player's thinking system, it truly approximates a "human avatar".
 
 #### Avatar File
@@ -358,11 +358,11 @@ we have the following mapping:
 
 | **WDL Range (W, D, L)**       | **Shashin Position’s Type**          | **Win Probability Range** | **Informator Symbols**| **Description**                                             |
 |-------------------------------|--------------------------------------|---------------------------|-----------------------|-------------------------------------------------------------|
-| [0, 3], [0, 4], [96, 100]    | High Petrosian                       | [0, 5]                  | -+                     | Winning: a decisive advantage, with the position clearly leading to victory.      |
-| [4, 6], [5, 8], [89, 95]     | High-Middle Petrosian                | [6, 10]                 | -+ \ -/+               | Decisive advantage: dominant position and likely winning.                      |
-| [7, 9], [9, 12], [80, 87]    | Middle Petrosian                     | [11, 15]                 | -/+                    | Clear advantage: a substantial positional advantage, but a win is not yet inevitable.                          |
-| [10, 12], [13, 16], [73, 79]  | Middle-Low Petrosian                 | [16, 20]                 | -/+ \ =/+              | Significant advantage: strong edge                   |
-| [13, 15], [17, 39], [66, 71]  | Low Petrosian                        | [21, 24]                 | =/+                    | Slight advantage with a positional edge, but no immediate threats.              |
+| [0, 3], [0, 4], [96, 100]    | High Petrosian                       | [0, 5]                  | -+                     | Winning: a decisive disadvantage, with the position clearly leading to victory.      |
+| [4, 6], [5, 8], [89, 95]     | High-Middle Petrosian                | [6, 10]                 | -+ \ -/+               | Decisive disadvantage: dominant position and likely winning.                      |
+| [7, 9], [9, 12], [80, 87]    | Middle Petrosian                     | [11, 15]                 | -/+                    | Clear disadvantage: a substantial positional advantage, but a win is not yet inevitable.                          |
+| [10, 12], [13, 16], [73, 79]  | Middle-Low Petrosian                 | [16, 20]                 | -/+ \ =/+              | Significant disadvantage: strong edge                   |
+| [13, 15], [17, 39], [66, 71]  | Low Petrosian                        | [21, 24]                 | =/+                    | Slight disadvantage with a positional edge, but no immediate threats.              |
 | [0, 30], [40, 99], [31, 64]  | Chaos: Capablanca-Petrosian          | [25, 49]                 | ↓                      | Opponent pressure and initiative: defensive position.        |
 | [0, 0], [100, 100], [0, 0]    | Capablanca                           | [50, 50]                 | =                      | Equal position. Both sides are evenly matched, with no evident advantage.           |
 | [30, 64], [40, 99], [0, 30]  | Chaos: Capablanca-Tal                | [51, 75]                 | ↑                      | Initiative: playing dictation with active moves and forcing ideas.                     |

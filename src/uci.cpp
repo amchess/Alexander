@@ -61,7 +61,9 @@ void UCIEngine::print_info_string(std::string_view str) {
     for (auto& line : split(str, "\n"))
     {
         if (!is_whitespace(line))
-        { std::cout << "info string " << line << '\n'; }
+        {
+            std::cout << "info string " << line << '\n';
+        }
     }
     sync_cout_end();
 }
@@ -84,7 +86,7 @@ void UCIEngine::init_search_update_listeners() {
     engine.set_on_update_full(
       [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
     engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
-	//from classical
+    //from classical
 }
 
 void UCIEngine::loop() {
@@ -122,7 +124,9 @@ void UCIEngine::loop() {
 
                 //Perform Q-learning if enabled
                 if (LD.learning_mode() == LearningMode::Self)
-                { putQLearningTrajectoryIntoLearningTable(); }
+                {
+                    putQLearningTrajectoryIntoLearningTable();
+                }
                 if (!LD.is_readonly())
                 {
                     //Save to learning file
@@ -250,9 +254,9 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 
     limits.startTime = now();  // The search starts as early as possible
     //from true handicap mode begin
-    if (Eval::limitStrength && Eval::handicappedDepth)
+    if (Eval::handicapConfig.limitStrength && Eval::handicapConfig.handicappedDepth)
     {
-        limits.depth = getHandicapDepth(Eval::uciElo);
+        limits.depth = getHandicapDepth(Eval::handicapConfig.uciElo);
     }
     //from true handicap mode end
     while (is >> token)

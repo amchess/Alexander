@@ -7,8 +7,6 @@
 #include <cstdint>
 #include "../uci.h"
 
-#include "../win_probability.h"
-
 using namespace std;
 using namespace Alexander;
 

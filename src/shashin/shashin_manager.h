@@ -1,15 +1,14 @@
-//shashin begin
 #ifndef SHASHIN_MANAGER_H
-    #define SHASHIN_MANAGER_H
-    #include "../position.h"
-    #include "../types.h"
-    #include "../movegen.h"
-    #include "../evaluate.h"
-    #include <unordered_map>
-    #include <array>
-    #include "../win_probability.h"
-    #include "shashin_types.h"
-    #include "shashin_helper.h"
+#define SHASHIN_MANAGER_H
+#include "../position.h"
+#include "../types.h"
+#include "../movegen.h"
+#include "../evaluate.h"
+#include <unordered_map>
+#include <array>
+#include "../wdl/win_probability.h"
+#include "shashin_types.h"
+#include "shashin_helper.h"
 namespace Alexander {
 namespace Eval {
 namespace NNUE {
@@ -35,28 +34,36 @@ class ShashinManager {
     getInitialShashinRange(Position& rootPos, Value staticValue, const ShashinConfig& config);
     // static methods
     static void  computeRootState(const Position& rootPos, RootShashinState& rootShashinState);
-    static Value static_value(Position&                     rootPos,
-                              Search::Stack*                ss);
-    void         initShashinValues(Position&                     rootPos,
-                                   Search::Stack*                ss,
-                                   const ShashinConfig&          config);
+    static bool  isPawnNearPromotion(const Position& rootPos);
+    static Value static_value(Position& rootPos, Search::Stack* ss);
+    void initShashinValues(Position& rootPos, Search::Stack* ss, const ShashinConfig& config);
     //inline methods
     inline bool useMoveGenAndStep17CrystalLogic() const {
 
         if (isStrategical() && state.highMaterial && state.legalMoveCount >= 30)
-        { return true; }
+        {
+            return true;
+        }
         // Tal logic: attacking with low complexity and king danger
         if (isTacticalAttacking() && state.legalMoveCount < 30 && state.kingDanger)
-        { return true; }
+        {
+            return true;
+        }
         // Default: no Crystal logic
         return false;
     }
     inline bool isComplexPosition() const {
-
-        size_t legalMoveCount = state.legalMoveCount;
-        bool   highMaterial   = state.highMaterial;
-        bool   kingDanger     = state.kingDanger;
-        return (legalMoveCount >= 25 && highMaterial) || kingDanger;
+        size_t legalMoveCount     = state.legalMoveCount;
+        bool   highMaterial       = state.highMaterial;
+        bool   kingDanger         = state.kingDanger;
+        bool   pawnsNearPromotion = state.pawnsNearPromotion;
+        return isComplexPosition(legalMoveCount, highMaterial, kingDanger, pawnsNearPromotion);
+    }
+    inline static bool isComplexPosition(size_t legalMoveCount,
+                                         bool   highMaterial,
+                                         bool   kingDanger,
+                                         bool   pawnsNearPromotion) {
+        return (legalMoveCount >= 25 && highMaterial) || kingDanger || pawnsNearPromotion;
     }
     inline bool useEarlyPruning() const {
         // No pruning beyond depth 8
@@ -240,4 +247,3 @@ class ShashinManager {
 };
 }  // namespace Alexander
 #endif  // SHASHIN_MANAGER_H
-        //shashin end
