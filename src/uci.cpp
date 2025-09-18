@@ -112,10 +112,10 @@ void UCIEngine::loop() {
         is >> std::skipws >> token;
 
         if (token == "quit" || token == "stop")
-        {  //Khalid
+        {  //learning
             engine.stop();
 
-            //Kelly begin
+            //learning begin
             if (token == "quit" && LD.is_enabled() && !LD.is_paused())
             {
                 //Wait for the current search operation (if any) to stop
@@ -133,7 +133,7 @@ void UCIEngine::loop() {
                     LD.persist(engine.get_options());
                 }
             }
-            //Kelly end
+            //learning end
         }
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
         // So, 'ponderhit' is sent if pondering was done on the same move that the user
@@ -165,7 +165,7 @@ void UCIEngine::loop() {
             pos.set(engine.fen(), engine.get_options()["UCI_Chess960"], &states->back(), nullptr);
         }  //Experience Book
         else if (token == "ucinewgame")
-        //Kelly and Khalid begin
+        //learning begin
         {
             if (LD.is_enabled())
             {
@@ -184,7 +184,7 @@ void UCIEngine::loop() {
             }
             engine.search_clear();
         }
-        //Kelly and Khalid end
+        //learning end
         else if (token == "isready")
             sync_cout << "readyok" << sync_endl;
 
@@ -297,7 +297,7 @@ void UCIEngine::go(std::istringstream& is) {
     Search::LimitsType limits = parse_limits(is);
 
     if (limits.perft)
-        perft(limits, nullptr);
+        perft(limits, nullptr);  //from classical
     else
         engine.go(limits);
 }
@@ -334,7 +334,7 @@ void UCIEngine::bench(std::istream& args) {
                 Search::LimitsType limits = parse_limits(is);
 
                 if (limits.perft)
-                    nodesSearched = perft(limits, nullptr);
+                    nodesSearched = perft(limits, nullptr);  //from classical
                 else
                 {
                     engine.go(limits);
@@ -353,7 +353,7 @@ void UCIEngine::bench(std::istream& args) {
             position(is);
         else if (token == "ucinewgame")
         {
-            //Kelly begin
+            //learning begin
             if (LD.is_enabled())
             {
                 if (LD.learning_mode() == LearningMode::Self && !LD.is_paused())
@@ -362,7 +362,7 @@ void UCIEngine::bench(std::istream& args) {
                 }
                 setStartPoint();
             }
-            //Kelly end
+            //learning end
             engine.search_clear();  // search_clear may take a while
             elapsed = now();
         }
@@ -598,12 +598,12 @@ std::string UCIEngine::format_score(const Score& s) {
 
     return s.visit(format);
 }
-//from Khalid begin
+//from learning begin
 int UCIEngine::getNormalizeToPawnValue(Position& pos) {
     auto [a, b] = WDLModel::win_rate_params(pos);
     return a;
 }
-//from Khalid end
+//from learning end
 
 // Turns a Value to an integer centipawn number,
 // without treatment of mate and similar special scores.
@@ -618,6 +618,7 @@ int UCIEngine::to_cp(Value v, const Position& pos) {
     return std::round(100 * int(v) / a);
 }
 
+//in wdl package for wdl model
 std::string UCIEngine::square(Square s) {
     return std::string{char('a' + file_of(s)), char('1' + rank_of(s))};
 }
@@ -673,11 +674,11 @@ void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
        << " multipv " << info.multiPV             //
        << " score " << format_score(info.score);  //
 
-    if (showWDL)
-        ss << " wdl " << info.wdl;
-
     if (!info.bound.empty())
         ss << " " << info.bound;
+
+    if (showWDL)
+        ss << " wdl " << info.wdl;
 
     ss << " nodes " << info.nodes        //
        << " nps " << info.nps            //

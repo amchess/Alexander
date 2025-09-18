@@ -160,6 +160,7 @@ mctsNodeInfo* get_node(const MonteCarlo* mcts, const Position& pos);
 // The Monte-Carlo tree is stored implicitly in one big hash table
 ///////////////////////////////////////////////////////////////////////////////////////
 typedef std::unordered_multimap<Key, mctsNodeInfo*> MCTS_MAP_BASE;
+extern std::atomic<size_t>                          MCTSNodeCount;
 class MCTSHashTable: public MCTS_MAP_BASE {
    public:
     ~MCTSHashTable() { clear(); }
@@ -172,9 +173,12 @@ class MCTSHashTable: public MCTS_MAP_BASE {
         }
 
         MCTS_MAP_BASE::clear();
+        MCTSNodeCount = 0;
     }
 };
 extern MCTSHashTable MCTS;
+extern MCTSHashTable MCTS;
+const size_t         MCTSMaxNodes = 100000;
 
 ///////////////////////////////////////////////////////////////////////////////////////
 // Main MCTS search class

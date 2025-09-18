@@ -117,8 +117,8 @@ ScoreForClassical evaluate(const Position& pos, Pawns::Entry* e) {
         opposed    = theirPawns & forward_file_bb(Us, s);
         blocked    = theirPawns & (s + Up);
         stoppers   = theirPawns & passed_pawn_span(Us, s);
-        lever      = theirPawns & pawn_attacks_bb(Us, s);
-        leverPush  = theirPawns & pawn_attacks_bb(Us, s + Up);
+        lever      = theirPawns & attacks_bb<PAWN>(s, Us);
+        leverPush  = theirPawns & attacks_bb<PAWN>(s + Up, Us);
         doubled    = ourPawns & (s - Up);
         neighbours = ourPawns & adjacent_files_bb(s);
         phalanx    = neighbours & rank_bb(s);

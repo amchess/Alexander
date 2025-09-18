@@ -18,6 +18,7 @@
 
 #include "engine.h"
 
+#include <algorithm>
 #include <cassert>
 #include <deque>
 #include <iosfwd>
@@ -43,13 +44,15 @@
 #include "book/book.h"        //book management
 #include "mcts/montecarlo.h"  //mcts
 namespace Alexander {
+//for classical
 
-constexpr auto StartFEN  = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-constexpr int  MaxHashMB = Is64Bit ? 33554432 : 2048;
+constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
+int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
 Engine::Engine(std::optional<std::string> path) :
     binaryDirectory(CommandLine::get_binary_directory(
-      path.value_or(""), CommandLine::get_working_directory())),  //from Khalid
+      path.value_or(""), CommandLine::get_working_directory())),  //learning
     numaContext(NumaConfig::from_system()),
     states(new std::deque<StateInfo>(1)),
     threads() {
@@ -70,7 +73,7 @@ Engine::Engine(std::optional<std::string> path) :
       }));
 
     options.add(  //
-      "Threads", Option(1, 1, 1024, [this](const Option&) {
+      "Threads", Option(1, 1, MaxThreads, [this](const Option&) {
           resize_threads();
           return thread_allocation_information_as_string();
       }));
@@ -177,13 +180,15 @@ Engine::Engine(std::optional<std::string> path) :
           return thread_binding_information_as_string();
       }));
 
-    // From Kelly
-    options.add("Persisted learning",
-                Option("Off var Off var Standard var Self", "Off", [this](const Option& o) {
-                    if (!(o == "Off"))
-                        LD.set_learning_mode(get_options(), o);
-                    return std::optional<std::string>{};
-                }));
+    // From learning
+    options.add("Persisted learning", Option("Off var Off var Standard var Self", "Off",
+                                             [this](const Option& o) -> std::optional<std::string> {
+                                                 if (!(o == "Off"))
+                                                 {
+                                                     LD.set_learning_mode(get_options(), o);
+                                                 }
+                                                 return std::optional<std::string>{};
+                                             }));
 
     options.add("Read only learning", Option(false, [](const Option& o) {
                     LD.set_readonly(o);
@@ -278,23 +283,47 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Concurrent Experience", Option(false));
 
     // Shashin personalities begin
-    options.add("High Tal", Option(false));
-
-    options.add("Middle Tal", Option(false));
-
-    options.add("Low Tal", Option(false));
-
-    options.add("Capablanca", Option(false));
-
-    options.add("Low Petrosian", Option(false));
-
-    options.add("Middle Petrosian", Option(false));
-
-    options.add("High Petrosian", Option(false));
+    options.add("High Tal",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("Middle Tal",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("Low Tal",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("Capablanca",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("Low Petrosian",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("Middle Petrosian",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
+    options.add("High Petrosian",
+                Option(false, [this](const Option&) noexcept -> std::optional<std::string> {
+                    resize_threads();
+                    return std::nullopt;
+                }));
     // Shashin personalities end
+    //from classical
     resize_threads();
 }
 std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960, Thread* th) {
+    //from classical
     return Benchmark::perft(fen, depth, isChess960, th);
 }
 
@@ -309,13 +338,12 @@ void Engine::stop() { threads.stop = true; }
 void Engine::search_clear() {
     wait_for_search_finished();
 
+    MCTS.clear();  //mcts
     tt.clear(threads);
-    MCTS.clear();  // mcts
     threads.clear();
 
     // @TODO wont work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files
-    WDLModel::init();                         //from learning and shashin
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -334,6 +362,7 @@ void Engine::set_on_bestmove(std::function<void(std::string_view, std::string_vi
     updateContext.onBestmove = std::move(f);
 }
 
+//from classical
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
 void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
@@ -393,11 +422,21 @@ void Engine::set_numa_config_from_option(const std::string& o) {
 
 void Engine::resize_threads() {
     threads.wait_for_search_finished();
-    threads.set(numaContext.get_numa_config(), {bookMan, options, threads, tt},
-                updateContext);  //book management
+    //from shashin begin
+    ShashinConfig shCfg;
+    shCfg.highTal         = options["High Tal"];
+    shCfg.middleTal       = options["Middle Tal"];
+    shCfg.lowTal          = options["Low Tal"];
+    shCfg.capablanca      = options["Capablanca"];
+    shCfg.highPetrosian   = options["High Petrosian"];
+    shCfg.middlePetrosian = options["Middle Petrosian"];
+    shCfg.lowPetrosian    = options["Low Petrosian"];
+    threads.set(numaContext.get_numa_config(), {bookMan, options, threads, tt, shCfg},
+                updateContext);  //book management from classical
 
     // Reallocate the hash with the new threadpool size
     set_tt_size(options["Hash"]);
+    //from classical
 }
 void Engine::init_bookMan(int bookIndex) { bookMan.init(bookIndex, options); }  //book management
 void Engine::resize_full(size_t requested) { threads.setFull(requested); }      //full threads patch

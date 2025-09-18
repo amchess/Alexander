@@ -26,15 +26,14 @@
 #include <string>
 
 #include "bitboard.h"
-//classical
 #include "types.h"
-#include "psqt.h"  //for classical begin
-
+#include "psqt.h"     //for classical
+#include "movegen.h"  //shashin
 
 namespace Alexander {
-//Kelly begin
+//larning begin
 extern void setStartPoint();
-//Kelly end
+//learning end
 class TranspositionTable;
 
 // StateInfo struct stores information needed to restore a Position object to
@@ -58,13 +57,11 @@ struct StateInfo {
     Key        key;
     Bitboard   checkersBB;
     StateInfo* previous;
-    StateInfo* next;
     Bitboard   blockersForKing[COLOR_NB];
     Bitboard   pinners[COLOR_NB];
     Bitboard   checkSquares[PIECE_TYPE_NB];
     Piece      capturedPiece;
     int        repetition;
-    //classical
 };
 
 
@@ -79,8 +76,7 @@ using StateListPtr = std::unique_ptr<std::deque<StateInfo>>;
 // pieces, side to move, hash keys, castling info, etc. Important methods are
 // do_move() and undo_move(), used by the search to update node info when
 // traversing the search tree.
-class Thread;  //for classical begin
-
+class Thread;  //for classical
 class Position {
    public:
     static void init();
@@ -96,9 +92,9 @@ class Position {
     std::string fen() const;
 
     // Position representation
-    Bitboard pieces(PieceType pt = ALL_PIECES) const;
+    Bitboard pieces() const;  // All pieces
     template<typename... PieceTypes>
-    Bitboard pieces(PieceType pt, PieceTypes... pts) const;
+    Bitboard pieces(PieceTypes... pts) const;
     Bitboard pieces(Color c) const;
     template<typename... PieceTypes>
     Bitboard pieces(Color c, PieceTypes... pts) const;
@@ -150,7 +146,10 @@ class Position {
     //for classical end
     // Doing and undoing moves
     void do_move(Move m, StateInfo& newSt, const TranspositionTable* tt);
-    void do_move(Move m, StateInfo& newSt, bool givesCheck, const TranspositionTable* tt);
+    void do_move(Move                      m,
+                 StateInfo&                newSt,
+                 bool                      givesCheck,
+                 const TranspositionTable* tt);  //for classical
     void undo_move(Move m);
     void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
     void undo_null_move();
@@ -166,21 +165,20 @@ class Position {
     Key non_pawn_key(Color c) const;
 
     // Other properties of the position
-    Color   side_to_move() const;
-    int     game_ply() const;
-    bool    is_chess960() const;
-    Thread* this_thread() const;  //for classical
-    bool    is_draw(int ply) const;
-    bool    is_repetition(int ply) const;
-    bool    upcoming_repetition(int ply) const;
-    bool    has_repeated() const;
-    //from Crystal begin
-    bool king_danger(Color c) const;
-    //from Crystal end
-    int               rule50_count() const;
-    ScoreForClassical psq_score() const;  //for classical
-    Value             non_pawn_material(Color c) const;
-    Value             non_pawn_material() const;
+    Color side_to_move() const;
+    int   game_ply() const;
+    bool  is_chess960() const;
+    bool  is_draw(int ply) const;
+    bool  is_repetition(int ply) const;
+    bool  upcoming_repetition(int ply) const;
+    bool  has_repeated() const;
+    //for classical begin
+    Thread*           this_thread() const;
+    ScoreForClassical psq_score() const;
+    //for classical end
+    int   rule50_count() const;
+    Value non_pawn_material(Color c) const;
+    Value non_pawn_material() const;
 
     // Position consistency check, for debugging
     bool pos_is_ok() const;
@@ -200,8 +198,8 @@ class Position {
     // Other helpers
     void move_piece(Square from, Square to);
     template<bool Do>
-    void do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);
-    template<bool AfterMove>
+    void
+        do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);  //for classical
     Key adjust_key50(Key k) const;
 
     // Data members
@@ -219,7 +217,7 @@ class Position {
     ScoreForClassical psq;  //for classical
     bool              chess960;
 };
-extern void   putQLearningTrajectoryIntoLearningTable();  //kelly
+extern void   putQLearningTrajectoryIntoLearningTable();  //learning
 std::ostream& operator<<(std::ostream& os, const Position& pos);
 
 inline Color Position::side_to_move() const { return sideToMove; }
@@ -233,11 +231,11 @@ inline bool Position::empty(Square s) const { return piece_on(s) == NO_PIECE; }
 
 inline Piece Position::moved_piece(Move m) const { return piece_on(m.from_sq()); }
 
-inline Bitboard Position::pieces(PieceType pt) const { return byTypeBB[pt]; }
+inline Bitboard Position::pieces() const { return byTypeBB[ALL_PIECES]; }
 
 template<typename... PieceTypes>
-inline Bitboard Position::pieces(PieceType pt, PieceTypes... pts) const {
-    return pieces(pt) | pieces(pts...);
+inline Bitboard Position::pieces(PieceTypes... pts) const {
+    return (byTypeBB[pts] | ...);
 }
 
 inline Bitboard Position::pieces(Color c) const { return byColorBB[c]; }
@@ -319,11 +317,9 @@ inline int Position::pawns_on_same_color_squares(Color c, Square s) const {
     return popcount(pieces(c, PAWN) & ((DarkSquares & s) ? DarkSquares : ~DarkSquares));
 }
 //for classical end
-inline Key Position::key() const { return adjust_key50<false>(st->key); }
-
-template<bool AfterMove>
+inline Key Position::key() const { return adjust_key50(st->key); }
 inline Key Position::adjust_key50(Key k) const {
-    return st->rule50 < 14 - AfterMove ? k : k ^ make_key((st->rule50 - (14 - AfterMove)) / 8);
+    return st->rule50 < 14 ? k : k ^ make_key((st->rule50 - 14) / 8);
 }
 
 inline Key Position::pawn_key() const { return st->pawnKey; }

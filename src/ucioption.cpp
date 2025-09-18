@@ -99,6 +99,7 @@ void OptionsMap::add(const std::string& name, const Option& option) {
     //combo management end
 }
 
+
 std::size_t OptionsMap::count(const std::string& name) const { return options_map.count(name); }
 
 Option::Option(const OptionsMap* map) :
@@ -126,7 +127,7 @@ Option::Option(OnChange f) :
     max(0),
     on_change(std::move(f)) {}
 
-Option::Option(double v, int minv, int maxv, OnChange f) :
+Option::Option(int v, int minv, int maxv, OnChange f) :
     type("spin"),
     min(minv),
     max(maxv),
@@ -170,7 +171,7 @@ Option& Option::operator=(const std::string& v) {
     //combo management begin
     if ((type != "button" && type != "string" && v.empty())
         || (type == "check" && v != "true" && v != "false")
-        || (type == "spin" && (std::stof(v) < min || std::stof(v) > max)))
+        || (type == "spin" && (std::stoi(v) < min || std::stoi(v) > max)))
     {
         return *this;
     }
@@ -223,7 +224,7 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
                 }
 
                 else if (o.type == "spin")
-                    os << " default " << int(stof(o.defaultValue)) << " min " << o.min << " max "
+                    os << " default " << stoi(o.defaultValue) << " min " << o.min << " max "
                        << o.max;
 
                 break;

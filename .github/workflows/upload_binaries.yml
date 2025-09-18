@@ -50,7 +50,7 @@ jobs:
 
       - name: Download wiki
         run: |
-          git clone https://github.com/official-alexander/Alexander.wiki.git wiki
+          git clone https://github.com/amchess/Alexander.wiki.git wiki
           rm -rf wiki/.git
           mv wiki alexander/
 

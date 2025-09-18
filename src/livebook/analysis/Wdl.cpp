@@ -1,10 +1,10 @@
 #ifdef USE_LIVEBOOK
     #include "Wdl.h"
 
-Wdl::Wdl(const uint32_t wins, const uint32_t draws, const uint32_t losses) :
-    wins(wins),
-    draws(draws),
-    losses(losses) {}
+Wdl::Wdl(const uint32_t wins_, const uint32_t draws_, const uint32_t losses_) :
+    wins(wins_),
+    draws(draws_),
+    losses(losses_) {}
 
 Wdl* Wdl::opponent() const { return new Wdl{losses, draws, wins}; }
 

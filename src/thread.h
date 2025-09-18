@@ -87,6 +87,7 @@ class Thread {
     void clear_worker();
     void run_custom_job(std::function<void()> f);
 
+    //no classical
     // Thread has been slightly altered to allow running custom jobs, so
     // this name is no longer correct. However, this class (and ThreadPool)
     // require further work to make them properly generic while maintaining

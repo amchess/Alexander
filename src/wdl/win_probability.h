@@ -14,6 +14,7 @@ struct WDL {       // Structure to represent Win-Draw-Loss in centipawns
 };
 
 void    init();  //inizializes the wdls array
+bool    is_initialized();
 WDL     get_wdl_by_material(const Value value,
                             const int   materialClamp);     // Returns the wdl, given the material
 WDL     get_wdl(const Value value, const Position& pos);  // Returns the WDL based on the position

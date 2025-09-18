@@ -25,7 +25,6 @@ body:
       ```
       position startpos moves g2g4 e7e5 f2f3
       go mate 1
-      info string NNUE evaluation using nn-6877cd24400e.nnue enabled
       info depth 1 seldepth 1 multipv 1 score mate 1 nodes 33 nps 11000 tbhits 0 time 3 pv d8h4
       bestmove d8h4
       ```

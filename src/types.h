@@ -37,8 +37,9 @@
 //               | only in 64-bit mode and requires hardware with pext support.
 
     #include <cassert>
+    #include <cstddef>
     #include <cstdint>
-    #include <cstddef>  //Mac build
+    #include <type_traits>
 
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
@@ -56,9 +57,15 @@
 // _WIN32                  Building on Windows (any)
 // _WIN64                  Building on Windows 64 bit
 
-    #if defined(__GNUC__) && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ <= 2)) \
-      && defined(_WIN32) && !defined(__clang__)
-        #define ALIGNAS_ON_STACK_VARIABLES_BROKEN
+// Enforce minimum GCC version
+    #if defined(__GNUC__) && !defined(__clang__) \
+      && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 3))
+        #error "Stockfish requires GCC 9.3 or later for correct compilation"
+    #endif
+
+    // Enforce minimum Clang version
+    #if defined(__clang__) && (__clang_major__ < 10)
+        #error "Stockfish requires Clang 10.0 or later for correct compilation"
     #endif
 
     #define ASSERT_ALIGNED(ptr, alignment) assert(reinterpret_cast<uintptr_t>(ptr) % alignment == 0)
@@ -109,15 +116,15 @@ using Bitboard = uint64_t;
 constexpr int MAX_MOVES = 256;
 constexpr int MAX_PLY   = 246;
 
-enum Color {
+enum Color : int8_t {
     WHITE,
     BLACK,
     COLOR_NB = 2
 };
-//kelly begin
+//learning begin
 constexpr Color Colors[2] = {WHITE, BLACK};
 
-enum CastlingRights {
+enum CastlingRights : int8_t {
     NO_CASTLING,
     WHITE_OO,
     WHITE_OOO = WHITE_OO << 1,
@@ -132,7 +139,7 @@ enum CastlingRights {
 
     CASTLING_RIGHT_NB = 16
 };
-////kelly end
+//learning end
 //for classical begin
 enum Phase {
     PHASE_ENDGAME,
@@ -149,7 +156,7 @@ enum ScaleFactor {
     SCALE_FACTOR_NONE   = 255
 };
 //for classical end
-enum Bound {
+enum Bound : int8_t {
     BOUND_NONE,
     BOUND_UPPER,
     BOUND_LOWER,
@@ -213,19 +220,14 @@ constexpr Value MidgameLimit  = 15258;
 constexpr Value EndgameLimit  = 3915;
 //from classical eval end
 constexpr Value RandomValue = 1200;  //handicap mode Michael Byrne
-//from Crystal begin
-constexpr Value PawnConversionFactor = 356;
-constexpr Value VALUE_TB_WIN         = 51 * PawnConversionFactor;
-constexpr Value VALUE_MAX_EVAL       = VALUE_TB_WIN - 8 * PawnConversionFactor;
-//from Cystal end
 // clang-format off
-enum PieceType {
+enum PieceType : std::int8_t {
     NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING,
     ALL_PIECES = 0,
     PIECE_TYPE_NB = 8
 };
 
-enum Piece {
+enum Piece : std::int8_t {
     NO_PIECE,
     W_PAWN = PAWN,     W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
     B_PAWN = PAWN + 8, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING,
@@ -247,26 +249,24 @@ constexpr Value PieceValue[PIECE_NB] = {
 
 using Depth = int;
 
-enum : int {
-    // The following DEPTH_ constants are used for transposition table entries
-    // and quiescence search move generation stages. In regular search, the
-    // depth stored in the transposition table is literal: the search depth
-    // (effort) used to make the corresponding transposition table value. In
-    // quiescence search, however, the transposition table entries only store
-    // the current quiescence move generation stage (which should thus compare
-    // lower than any regular search depth).
-    DEPTH_QS = 0,
-    // For transposition table entries where no searching at all was done
-    // (whether regular or qsearch) we use DEPTH_UNSEARCHED, which should thus
-    // compare lower than any quiescence or regular depth. DEPTH_ENTRY_OFFSET
-    // is used only for the transposition table entry occupancy check (see tt.cpp),
-    // and should thus be lower than DEPTH_UNSEARCHED.
-    DEPTH_UNSEARCHED   = -2,
-    DEPTH_ENTRY_OFFSET = -3
-};
+// The following DEPTH_ constants are used for transposition table entries
+// and quiescence search move generation stages. In regular search, the
+// depth stored in the transposition table is literal: the search depth
+// (effort) used to make the corresponding transposition table value. In
+// quiescence search, however, the transposition table entries only store
+// the current quiescence move generation stage (which should thus compare
+// lower than any regular search depth).
+constexpr Depth DEPTH_QS = 0;
+// For transposition table entries where no searching at all was done
+// (whether regular or qsearch) we use DEPTH_UNSEARCHED, which should thus
+// compare lower than any quiescence or regular depth. DEPTH_ENTRY_OFFSET
+// is used only for the transposition table entry occupancy check (see tt.cpp),
+// and should thus be lower than DEPTH_UNSEARCHED.
+constexpr Depth DEPTH_UNSEARCHED   = -2;
+constexpr Depth DEPTH_ENTRY_OFFSET = -3;
 
 // clang-format off
-enum Square : int {
+enum Square : int8_t {
     SQ_A1, SQ_B1, SQ_C1, SQ_D1, SQ_E1, SQ_F1, SQ_G1, SQ_H1,
     SQ_A2, SQ_B2, SQ_C2, SQ_D2, SQ_E2, SQ_F2, SQ_G2, SQ_H2,
     SQ_A3, SQ_B3, SQ_C3, SQ_D3, SQ_E3, SQ_F3, SQ_G3, SQ_H3,
@@ -282,7 +282,7 @@ enum Square : int {
 };
 // clang-format on
 
-enum Direction : int {
+enum Direction : int8_t {
     NORTH = 8,
     EAST  = 1,
     SOUTH = -NORTH,
@@ -294,7 +294,7 @@ enum Direction : int {
     NORTH_WEST = NORTH + WEST
 };
 
-enum File : int {
+enum File : int8_t {
     FILE_A,
     FILE_B,
     FILE_C,
@@ -306,7 +306,7 @@ enum File : int {
     FILE_NB
 };
 
-enum Rank : int {
+enum Rank : int8_t {
     RANK_1,
     RANK_2,
     RANK_3,
@@ -358,8 +358,8 @@ inline Value mg_value(ScoreForClassical s) {
         inline T&   operator-=(T& d1, int d2) { return d1 = d1 - d2; }
 //for classical end
     #define ENABLE_INCR_OPERATORS_ON(T) \
-        inline T& operator++(T& d) { return d = T(int(d) + 1); } \
-        inline T& operator--(T& d) { return d = T(int(d) - 1); }
+        constexpr T& operator++(T& d) { return d = T(int(d) + 1); } \
+        constexpr T& operator--(T& d) { return d = T(int(d) - 1); }
 //for classical begin
     #define ENABLE_FULL_OPERATORS_ON(T) \
         ENABLE_BASE_OPERATORS_ON(T) \
@@ -444,7 +444,7 @@ constexpr Piece make_piece(Color c, PieceType pt) { return Piece((c << 3) + pt);
 
 constexpr PieceType type_of(Piece pc) { return PieceType(pc & 7); }
 
-inline Color color_of(Piece pc) {
+constexpr Color color_of(Piece pc) {
     assert(pc != NO_PIECE);
     return Color(pc >> 3);
 }
@@ -539,6 +539,13 @@ class Move {
     std::uint16_t data;
 };
 
+template<typename T, typename... Ts>
+struct is_all_same {
+    static constexpr bool value = (std::is_same_v<T, Ts> && ...);
+};
+
+template<typename... Ts>
+constexpr auto is_all_same_v = is_all_same<Ts...>::value;
 }  // namespace Alexander
 
 #endif  // #ifndef TYPES_H_INCLUDED

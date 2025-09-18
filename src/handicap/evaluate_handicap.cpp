@@ -22,7 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include "../misc.h"
-#include "../position.h"
+#include "../shashin/shashin_position.h"
 #include "../types.h"
 #include "../uci.h"
 #include "../ucioption.h"
@@ -130,26 +130,26 @@ void initHandicapMinMaxValueThresholds() {
 Value get_handicap_value(Value baseEvaluation, int uciElo, const Position& pos) {
     bool complexPosition = isComplex(pos);
 
-    struct HandicapConfig {
+    struct HandicapErrorRange {
         int minErrorMagnitude;
         int maxErrorMagnitude;
     };
 
-    HandicapConfig handicapConfigs[] = {
+    HandicapErrorRange handicapErrorRanges[] = {
       {MIN_ERROR_MAGNITUDE_BEGINNER, MAX_ERROR_MAGNITUDE_BEGINNER},
       {MIN_ERROR_MAGNITUDE_INTERMEDIATE, MAX_ERROR_MAGNITUDE_INTERMEDIATE},
       {MIN_ERROR_MAGNITUDE_ADVANCED, MAX_ERROR_MAGNITUDE_ADVANCED},
       {MIN_ERROR_MAGNITUDE_EXPERT, MAX_ERROR_MAGNITUDE_EXPERT}};
 
-    HandicapConfig selectedConfig;
+    HandicapErrorRange selectedRange;
     if (uciElo <= BEGINNER_MAX_ELO)
-        selectedConfig = handicapConfigs[0];
+        selectedRange = handicapErrorRanges[0];
     else if (uciElo <= INTERMEDIATE_MAX_ELO)
-        selectedConfig = handicapConfigs[1];
+        selectedRange = handicapErrorRanges[1];
     else if (uciElo <= ADVANCED_MAX_ELO)
-        selectedConfig = handicapConfigs[2];
+        selectedRange = handicapErrorRanges[2];
     else
-        selectedConfig = handicapConfigs[3];
+        selectedRange = handicapErrorRanges[3];
 
     // **Gradual transition with sigmoid to reduce the error near the max elo**
     int eloMin = (uciElo <= BEGINNER_MAX_ELO)     ? MIN_ELO
@@ -166,8 +166,8 @@ Value get_handicap_value(Value baseEvaluation, int uciElo, const Position& pos) 
     // **Error coefficient to apply based on the elo**
     double errorCoefficient = get_error_coefficient(uciElo) * (1.0 - progress);
 
-    int minError = static_cast<int>(selectedConfig.minErrorMagnitude * errorCoefficient);
-    int maxError = static_cast<int>(selectedConfig.maxErrorMagnitude * errorCoefficient);
+    int minError = static_cast<int>(selectedRange.minErrorMagnitude * errorCoefficient);
+    int maxError = static_cast<int>(selectedRange.maxErrorMagnitude * errorCoefficient);
 
     std::uniform_int_distribution<> errorDis(minError, maxError);
     int                             errorMagnitude = errorDis(tls_rng);
@@ -219,10 +219,11 @@ Value get_handicap_value(Value baseEvaluation, int uciElo, const Position& pos) 
 }
 
 bool isComplex(const Position& pos) {
-    size_t legalMoveCount     = MoveList<LEGAL>(pos).size();
-    bool   highMaterial       = pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) > 2400;
-    bool   kingDanger         = pos.king_danger(WHITE) || pos.king_danger(BLACK);
-    bool   pawnsNearPromotion = ShashinManager::isPawnNearPromotion(pos);
+    size_t legalMoveCount = MoveList<LEGAL>(pos).size();
+    bool   highMaterial   = pos.non_pawn_material(WHITE) + pos.non_pawn_material(BLACK) > 2400;
+    bool   kingDanger     = Shashin::king_danger(pos, WHITE) || Shashin::king_danger(pos, BLACK);
+    ShashinManager shashinManager;
+    bool           pawnsNearPromotion = shashinManager.isPawnNearPromotion(pos);
     return ShashinManager::isComplexPosition(legalMoveCount, highMaterial, kingDanger,
                                              pawnsNearPromotion);
 }

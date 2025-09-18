@@ -119,6 +119,7 @@ class Engine {
     //for classical
     BookManager                          bookMan;  //book management
     Search::SearchManager::UpdateContext updateContext;
+    //for classical
 };
 
 }  // namespace Alexander

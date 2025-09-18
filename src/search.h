@@ -35,16 +35,17 @@
 #include "misc.h"
 //from classical
 #include "numa.h"
-#include "position.h"
 #include "score.h"
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
-//from Alexander begin
+#include "types.h"
+//from Shashin begin
+#include "shashin/shashin_position.h"
 #include "evaluate.h"
 #include "book/book_manager.h"
 #include <memory>
+#include "shashin/shashin_manager.h"
 //from Alexander end
-#include "types.h"
 
 namespace Alexander {
 
@@ -80,11 +81,11 @@ struct Stack {
     bool                        ttHit;
     int                         cutoffCnt;
     int                         reduction;
-    bool                        isTTMove;
-    //from Crystal-shashin begin
-    bool secondaryLine;
-    bool mainLine;
-    //from Crystal-shashin end
+    int                         quietMoveStreak;
+    //from Shashin Crystal begin
+    bool secondaryLine = false;
+    bool mainLine      = false;
+    //from Shashin Crystal end
 };
 
 
@@ -144,20 +145,22 @@ struct LimitsType {
 // This struct is used to easily forward data to the Search::Worker class.
 struct SharedState {
     //from Polyfish begin
-    SharedState(BookManager&        bm,
-                const OptionsMap&   optionsMap,
-                ThreadPool&         threadPool,
-                TranspositionTable& transpositionTable) :
+    SharedState(BookManager&                    bm,
+                const OptionsMap&               optionsMap,
+                ThreadPool&                     threadPool,
+                TranspositionTable&             transpositionTable,
+                const Alexander::ShashinConfig& shCfg) :
         bookMan(bm),
         options(optionsMap),
         threads(threadPool),
-        tt(transpositionTable) {}
-
+        tt(transpositionTable),
+        shashinConfig(shCfg) {}
     BookManager& bookMan;
     //from Polyfish end
-    const OptionsMap&   options;
-    ThreadPool&         threads;
-    TranspositionTable& tt;
+    const OptionsMap&              options;
+    ThreadPool&                    threads;
+    TranspositionTable&            tt;
+    const Alexander::ShashinConfig shashinConfig;  //Shashin
 };
 
 class Worker;
@@ -194,6 +197,7 @@ struct InfoIteration {
     size_t           currmovenumber;
 };
 
+//no skill
 // SearchManager manages the search from the main thread. It is responsible for
 // keeping track of the time, and storing data strictly related to the main thread.
 class SearchManager: public ISearchManager {
@@ -219,7 +223,8 @@ class SearchManager: public ISearchManager {
     void pv(Search::Worker&           worker,
             const ThreadPool&         threads,
             const TranspositionTable& tt,
-            Depth                     depth);
+            Depth                     depth,
+            bool                      updateShashin);  //shashin
 
     Alexander::TimeManagement tm;
     double                    originalTimeAdjust;
@@ -276,15 +281,24 @@ class Worker {
 
     CorrectionHistory<Pawn>         pawnCorrectionHistory;
     CorrectionHistory<Minor>        minorPieceCorrectionHistory;
-    CorrectionHistory<NonPawn>      nonPawnCorrectionHistory[COLOR_NB];
+    CorrectionHistory<NonPawn>      nonPawnCorrectionHistory;
     CorrectionHistory<Continuation> continuationCorrectionHistory;
-    RootMoves                       rootMoves;            //mcts
-    Depth                           completedDepth;       //mcts
-    bool                            nmpGuard, nmpGuardV;  //from Crystal-shashin
-    ShashinManager&                 getShashinManager();  //from crystal-Shashin
+    TTMoveHistory                   ttMoveHistory;
+    RootMoves                       rootMoves;                          //mcts
+    Depth                           completedDepth;                     //mcts
+    bool                            nmpGuard = false, nmpSide = false;  //from Crystal-shashin
+    ShashinManager&                 getShashinManager();                //from crystal-Shashin
+    int                             lastShashinUpdatedDepth = 0;        //from shashin
 
    private:
     void iterative_deepening();
+
+    void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
+    void
+    do_move(Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss);
+    void do_null_move(Position& pos, StateInfo& st);
+    void undo_move(Position& pos, const Move move);
+    void undo_null_move(Position& pos);
 
     // This is the main search function, for both PV and non-PV nodes
     template<NodeType nodeType>
@@ -294,7 +308,8 @@ class Worker {
     template<NodeType nodeType>
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
 
-    Depth reduction(bool i, Depth d, int mn, int delta) const;
+    Depth
+    reduction(bool i, Depth d, int mn, int delta, bool isStrategical, bool isAggressive) const;
 
     // Pointer to the search manager, only allowed to be called by the main thread
     SearchManager* main_manager() const {
@@ -311,7 +326,7 @@ class Worker {
 
     size_t                pvIdx, pvLast;
     std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
-    int                   selDepth, nmpMinPly, nmpSide;  //from crystal-shashin
+    int                   selDepth, nmpMinPly;
     Value                 optimism[COLOR_NB];
 
     Position  rootPos;
@@ -321,7 +336,7 @@ class Worker {
     Value rootDelta;
 
     //for mcts
-    bool                      fullSearch;  //full threads patch
+    bool                      fullSearch = false;  //full threads patch
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
@@ -335,12 +350,14 @@ class Worker {
     //From PolyFish begin
     BookManager& bookMan;
     //From PolyFish end
-    const OptionsMap&               options;
-    ThreadPool&                     threads;
-    TranspositionTable&             tt;
-    std::unique_ptr<ShashinManager> shashinManager;  //Shashin
-    //no classical
-    friend class Alexander::ThreadPool;
+    const OptionsMap&   options;
+    ThreadPool&         threads;
+    TranspositionTable& tt;
+    //Shashin begin
+    std::unique_ptr<ShashinManager> shashinManager;
+    const Alexander::ShashinConfig& shConfig;
+    //Shashin end
+    friend class Alexander::ThreadPool;  //no classical
     friend class SearchManager;
 };
 

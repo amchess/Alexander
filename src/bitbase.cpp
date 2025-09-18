@@ -109,7 +109,7 @@ KPKPosition::KPKPosition(unsigned idx) {
 
     // Invalid if two pieces are on the same square or if a king can be captured
     if (distance(ksq[WHITE], ksq[BLACK]) <= 1 || ksq[WHITE] == psq || ksq[BLACK] == psq
-        || (stm == WHITE && (pawn_attacks_bb(WHITE, psq) & ksq[BLACK])))
+        || (stm == WHITE && (attacks_bb<PAWN>(psq, WHITE) & ksq[BLACK])))
         result = INVALID;
 
     // Win if the pawn can be promoted without getting captured
@@ -120,7 +120,7 @@ KPKPosition::KPKPosition(unsigned idx) {
     // Draw if it is stalemate or the black king can capture the pawn
     else if (stm == BLACK
              && (!(attacks_bb<KING>(ksq[BLACK])
-                   & ~(attacks_bb<KING>(ksq[WHITE]) | pawn_attacks_bb(WHITE, psq)))
+                   & ~(attacks_bb<KING>(ksq[WHITE]) | attacks_bb<PAWN>(psq, WHITE)))
                  || (attacks_bb<KING>(ksq[BLACK]) & ~attacks_bb<KING>(ksq[WHITE]) & psq)))
         result = DRAW;
 

@@ -34,7 +34,7 @@ namespace Alexander {
 class Position;
 class Move;
 class Score;
-enum Square : int;
+enum Square : int8_t;
 using Value = int;
 
 class UCIEngine {

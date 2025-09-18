@@ -9,15 +9,13 @@ message: >-
 type: software
 authors:
   - name: The Alexander developers (see AUTHORS file)
-repository-code: 'https://github.com/official-alexander/Alexander'
-url: 'https://alexanderchess.org/'
-repository-artifact: 'https://alexanderchess.org/download/'
+repository-code: 'https://github.com/amchess/Alexander'
+url: 'https://github.com/amchess/Alexander'
+repository-artifact: 'https://github.com/amchess/Alexander/tags'
 abstract: Alexander is a free and strong UCI chess engine.
 keywords:
   - chess
   - artificial intelligence (AI)
   - tree search
   - alpha-beta search
-  - neural networks (NN)
-  - efficiently updatable neural networks (NNUE)
-license: GPL-3.0
+cense: GPL-3.0

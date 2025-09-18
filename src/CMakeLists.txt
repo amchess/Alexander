@@ -24,7 +24,7 @@ set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp handica
         livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp
         livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp
         livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp
-        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp) shashin/shashin_manager.cpp
+        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp) shashin/shashin_manager.cpp shashin/moveconfig.cpp
 
 set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h handicap/evaluate_handicap.h material.h misc.h movegen.h movepick.h history.h pawns.h
         position.h
@@ -36,7 +36,7 @@ set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h handicap/evaluate_handic
         livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h
         livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h
         livebook/LichessGames.h livebook/ChessDBContributor.h
-        livebook/json/json.hpp) shashin/shashin_manager.h
+        livebook/json/json.hpp) shashin/shashin_manager.h shashin/moveconfig.h
 
 
 # Set default values for options
@@ -154,13 +154,6 @@ endif ()
 # Installation
 install(TARGETS ${EXE} DESTINATION ${BINDIR})
 
-add_custom_target(net ALL
-        DEPENDS ${NNUE_NET}
-)
-
-add_custom_target(clean-net
-        COMMAND ${CMAKE_COMMAND} -E remove ${NNUE_NET}
-)
 
 add_compile_definitions(USE_LIVEBOOK)
 

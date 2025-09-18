@@ -22,8 +22,9 @@ inline size_t index(const Alexander::Value v, const int m) {
 // Calculate the "a" and "b" parameters of the WDL model for a given material
 WinRateParams win_rate_params(int materialClamp) {
     double           m    = materialClamp / 58.0;
-    constexpr double as[] = {-37.45051876, 121.19101539, -132.78783573, 420.70576692};
-    constexpr double bs[] = {90.26261072, -137.26549898, 71.10130540, 51.35259597};
+    constexpr double as[] = {-13.50030198, 40.92780883, -36.82753545, 386.83004070};
+    constexpr double bs[] = {96.53354896, -165.79058388, 90.89679019, 49.29561889};
+
 
     double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
     double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
@@ -60,8 +61,12 @@ int win_rate_model(Value v, const Position& pos) {  //resta invariao
     // Return the win rate in per mille units, rounded to the nearest integer.
     return int(0.5 + 1000 / (1 + std::exp((a - double(v)) / b)));
 }
+static bool initialized = false;  // Inizialization flag
 // Function to inizialize the WDL array
 void init() {
+    if (initialized)
+        return;  // Evita di ricaricare se già inizializzato
+    initialized = true;
     for (int valueClamp = -4000; valueClamp <= 4000; ++valueClamp)
     {
         for (int materialClamp = 17; materialClamp <= 78; ++materialClamp)
@@ -78,7 +83,8 @@ void init() {
         }
     }
 }
-WDL get_precomputed_wdl(int valueClamp, int materialClamp) {
+bool is_initialized() { return initialized; }
+WDL  get_precomputed_wdl(int valueClamp, int materialClamp) {
     return wdl_data[index(valueClamp, materialClamp)];
 }
 // Functions to get WDL or win probability
