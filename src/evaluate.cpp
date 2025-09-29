@@ -53,6 +53,25 @@ enum Term {  // The first 8 entries are reserved for PieceType
     TERM_NB
 };
 
+// Per la mobilità dettagliata
+enum Area { 
+    QUEEN_SIDE, 
+    CENTER, 
+    KING_SIDE, 
+    AREA_NB 
+};
+
+// Funzione helper per determinare l'area di un square
+static Area area_of(Square s) {
+    File f = file_of(s);
+    if (f <= FILE_C) return QUEEN_SIDE;
+    if (f <= FILE_E) return CENTER;
+    return KING_SIDE;
+}
+
+// Array per i conteggi di mobilità dettagliati [COLOR][AREA]
+int mobility_area_counts[COLOR_NB][AREA_NB] = {0};
+
 ScoreForClassical scores[TERM_NB][COLOR_NB];
 
 static void add(int idx, Color c, ScoreForClassical s) { scores[idx][c] = s; }
@@ -217,6 +236,17 @@ class Evaluation {
     // a white knight on g5 and black's king is on g8, this white knight adds 2
     // to kingAttacksCount[WHITE].
     int kingAttacksCount[COLOR_NB];
+    // Funzione helper per calcolare la mobilità dettagliata per area
+        template<Color Us, PieceType Pt>
+        void update_mobility_area_counts(Bitboard attacks) {
+            if constexpr (T) {
+                while (attacks) {
+                    Square s = pop_lsb(attacks);
+                    Area area = Trace::area_of(s);
+                    Trace::mobility_area_counts[Us][area]++;
+                }
+            }
+        }
 };
 // Evaluation::initialize() computes king and pawn attacks, and the king ring
 // bitboard for a given color. This is done at the beginning of the evaluation.
@@ -309,6 +339,10 @@ ScoreForClassical Evaluation<T>::pieces() {
 
         int mob = popcount(b & mobilityArea[Us]);
         mobility[Us] += MobilityBonus[Pt - 2][mob];
+
+        // CALCOLA CONTEGGI MOBILITÀ DETTAGLIATI PER AREA (senza distinguere il pezzo)
+        Bitboard mobility_attacks = b & mobilityArea[Us];
+        update_mobility_area_counts<Us, Pt>(mobility_attacks);
 
         if constexpr (Pt == BISHOP || Pt == KNIGHT)
         {
@@ -1117,6 +1151,7 @@ std::string Eval::trace(Position& pos) {
     std::memset(Trace::bishop_detail, 0, sizeof(Trace::bishop_detail));
     std::memset(Trace::rook_detail, 0, sizeof(Trace::rook_detail));
     std::memset(Trace::queen_detail, 0, sizeof(Trace::queen_detail));
+    std::memset(Trace::mobility_area_counts, 0, sizeof(Trace::mobility_area_counts));
 
     pos.this_thread()->bestValue = VALUE_ZERO;
 
@@ -1216,7 +1251,31 @@ std::string Eval::trace(Position& pos) {
             ss << "\n";
         }
     };
-
+    auto print_mobility_area_summary = [&]() {
+            ss << "  Mobility by area:\n";
+            const char* area_names[Trace::AREA_NB] = {"Queen Side", "Center", "King Side"};
+            
+            for (int c = WHITE; c <= BLACK; ++c) {
+                ss << "    " << (c == WHITE ? "White: " : "Black: ");
+                for (int area = 0; area < Trace::AREA_NB; ++area) {
+                    ss << area_names[area] << "(" << Trace::mobility_area_counts[c][area] << ") ";
+                }
+                ss << "\n";
+            }
+            
+            // Aggiungi il totale per colore
+            ss << "    Total: White(";
+            int white_total = 0;
+            for (int area = 0; area < Trace::AREA_NB; ++area) {
+                white_total += Trace::mobility_area_counts[WHITE][area];
+            }
+            ss << white_total << ") Black(";
+            int black_total = 0;
+            for (int area = 0; area < Trace::AREA_NB; ++area) {
+                black_total += Trace::mobility_area_counts[BLACK][area];
+            }
+            ss << black_total << ")\n";
+        };
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2)
        << "     Term    |    White    |    Black    |    Total   \n"
        << "             |   MG    EG  |   MG    EG  |   MG    EG \n"
@@ -1248,6 +1307,7 @@ std::string Eval::trace(Position& pos) {
     print_unit_detail(QUEEN, "Queens");
 
     append_term_row(ss, "Mobility", MOBILITY, pos);
+    print_mobility_area_summary();
     append_term_row(ss, "King safety", KING, pos);
     append_term_row(ss, "Threats", THREAT, pos);
 
