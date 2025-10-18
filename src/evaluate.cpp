@@ -32,63 +32,10 @@
 #include "material.h"
 #include <cstring>  // For std::memset
 #include <string>
+#include "handicap/trace/trace.h"
+#include "wdl/win_probability.h"
 namespace Alexander {
-
-namespace Trace {
-
-enum Tracing {
-    NO_TRACE,
-    TRACE
-};
-
-enum Term {  // The first 8 entries are reserved for PieceType
-    MATERIAL = 8,
-    IMBALANCE,
-    MOBILITY,
-    THREAT,
-    PASSED,
-    SPACE,
-    WINNABLE,
-    TOTAL,
-    TERM_NB
-};
-
-// Per la mobilità dettagliata
-enum Area { 
-    QUEEN_SIDE, 
-    CENTER, 
-    KING_SIDE, 
-    AREA_NB 
-};
-
-// Funzione helper per determinare l'area di un square
-static Area area_of(Square s) {
-    File f = file_of(s);
-    if (f <= FILE_C) return QUEEN_SIDE;
-    if (f <= FILE_E) return CENTER;
-    return KING_SIDE;
-}
-
-// Array per i conteggi di mobilità dettagliati [COLOR][AREA]
-int mobility_area_counts[COLOR_NB][AREA_NB] = {0};
-
-ScoreForClassical scores[TERM_NB][COLOR_NB];
-
-static void add(int idx, Color c, ScoreForClassical s) { scores[idx][c] = s; }
-
-static void add(int idx, ScoreForClassical w, ScoreForClassical b = SCORE_ZERO) {
-    scores[idx][WHITE] = w;
-    scores[idx][BLACK] = b;
-}
-// Per-unità detail arrays, solo per trace
-ScoreForClassical pawn_detail[COLOR_NB][SQUARE_NB];
-ScoreForClassical knight_detail[COLOR_NB][SQUARE_NB];
-ScoreForClassical bishop_detail[COLOR_NB][SQUARE_NB];
-ScoreForClassical rook_detail[COLOR_NB][SQUARE_NB];
-ScoreForClassical queen_detail[COLOR_NB][SQUARE_NB];
-}
 using namespace Trace;
-
 namespace {
 
 // Threshold for lazy and space evaluation
@@ -173,7 +120,7 @@ constexpr ScoreForClassical WeakQueen           = S(57, 19);
 #undef S
 
 // Evaluation class computes and stores attacks tables and other working data
-template<Tracing T>
+template<Trace::Tracing T>
 class Evaluation {
    public:
     Evaluation() = delete;
@@ -181,12 +128,7 @@ class Evaluation {
         pos(p) {}
     Evaluation& operator=(const Evaluation&) = delete;
     Value       value();
-    //for detaild trace begin
-    template<Color Us, PieceType Pt>
-    ScoreForClassical piece_detail(Square s) const;
-    template<Color Us>
-    ScoreForClassical pawn_detail(Square s) const;
-    //for detaild trace end
+
    private:
     template<Color Us>
     void initialize();
@@ -237,21 +179,23 @@ class Evaluation {
     // to kingAttacksCount[WHITE].
     int kingAttacksCount[COLOR_NB];
     // Funzione helper per calcolare la mobilità dettagliata per area
-        template<Color Us, PieceType Pt>
-        void update_mobility_area_counts(Bitboard attacks) {
-            if constexpr (T) {
-                while (attacks) {
-                    Square s = pop_lsb(attacks);
-                    Area area = Trace::area_of(s);
-                    Trace::mobility_area_counts[Us][area]++;
-                }
+    template<Color Us, PieceType Pt>
+    void update_mobility_area_counts(Bitboard attacks) {
+        if constexpr (T)
+        {
+            while (attacks)
+            {
+                Square s    = pop_lsb(attacks);
+                Area   area = Trace::area_of(s);
+                Trace::mobility_area_counts[Us][area]++;
             }
         }
+    }
 };
 // Evaluation::initialize() computes king and pawn attacks, and the king ring
 // bitboard for a given color. This is done at the beginning of the evaluation.
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us>
 void Evaluation<T>::initialize() {
 
@@ -293,7 +237,7 @@ void Evaluation<T>::initialize() {
 
 // Evaluation::pieces() scores pieces of a given color and type
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us, PieceType Pt>
 ScoreForClassical Evaluation<T>::pieces() {
 
@@ -441,140 +385,10 @@ ScoreForClassical Evaluation<T>::pieces() {
 
     return score;
 }
-//for detailed trace begin
-// Evaluation::pawn_detail() computes detailed score for a specific pawn
-// This is only used for tracing and debugging purposes
-template<Tracing T>
-template<Color Us>
-ScoreForClassical Evaluation<T>::pawn_detail(Square s) const {
-    
-    constexpr Color     Them = ~Us;
-    constexpr Direction Up   = pawn_push(Us);
-    
-    ScoreForClassical score = SCORE_ZERO;
-
-    // NOTA: Non includiamo PSQT qui, solo bonus/penalità specifici dei pedoni
-
-    // Get the file and rank of the pawn
-    File f = file_of(s);
-    Rank r = rank_of(s);
-    
-    // Doubled pawns penalty - check if there are pawns of the same color behind this pawn
-    Bitboard pawnsInFront = pos.pieces(Us, PAWN) & forward_file_bb(Us, s);
-    if (pawnsInFront) {
-        score -= make_score(10, 24);
-    }
-
-    // Passed pawn bonus
-    if (pe->passed_pawns(Us) & s) {
-        int relativeR = relative_rank(Us, s);
-        score += PassedRank[relativeR];
-        
-        // Passed file penalty
-        score -= PassedFile * edge_distance(f);
-    }
-
-    // Protected pawn bonus
-    if (attackedBy[Us][PAWN] & s) {
-        score += make_score(5, 12);
-    }
-
-    // Pawn on open/semi-open file
-    if (pos.is_on_semiopen_file(Us, s)) {
-        if (pos.is_on_semiopen_file(Them, s)) {
-            // Open file
-            score += make_score(8, 4);
-        } else {
-            // Semi-open file
-            score += make_score(4, 2);
-        }
-    }
-
-    // Pawn chain bonus - check for pawns that protect this pawn
-    if (f > FILE_A && (pos.pieces(Us, PAWN) & (s - Up - EAST))) {
-        score += make_score(3, 7);
-    }
-    if (f < FILE_H && (pos.pieces(Us, PAWN) & (s - Up - WEST))) {
-        score += make_score(3, 7);
-    }
-
-    // Pawn mobility (potential pushes)
-    if (pos.empty(s + Up)) {
-        score += make_score(2, 5);
-        // Double push from starting position
-        if (r == (Us == WHITE ? RANK_2 : RANK_7) && pos.empty(s + Up + Up)) {
-            score += make_score(3, 0);
-        }
-    }
-
-    return score;
-}
-// Evaluation::piece_detail() computes detailed score for a specific piece
-// This is only used for tracing and debugging purposes
-template<Tracing T>
-template<Color Us, PieceType Pt>
-ScoreForClassical Evaluation<T>::piece_detail(Square s) const {
-    
-    constexpr Color     Them = ~Us;
-    constexpr Direction Down = -pawn_push(Us);
-    
-    ScoreForClassical score = SCORE_ZERO;
-
-    // NOTA: Non includiamo PSQT, mobilità o attacchi al re qui
-    // perché sono già inclusi in altri termini della tabella principale
-
-    // Knight and Bishop specific evaluations
-    if constexpr (Pt == BISHOP || Pt == KNIGHT) {
-        // Shielded by pawn
-        if (shift<Down>(pos.pieces(PAWN)) & s) {
-            score += MinorBehindPawn;
-        }
-
-        // Distance from king penalty
-        score -= KingProtector[Pt == BISHOP] * distance(pos.square<KING>(Us), s);
-
-        // Bishop-specific evaluations
-        if constexpr (Pt == BISHOP) {
-            // Chess960 cornered bishop
-            if (pos.is_chess960() && (s == relative_square(Us, SQ_A1) || s == relative_square(Us, SQ_H1))) {
-                Direction d = pawn_push(Us) + (file_of(s) == FILE_A ? EAST : WEST);
-                if (pos.piece_on(s + d) == make_piece(Us, PAWN)) {
-                    score -= !pos.empty(s + d + pawn_push(Us))
-                             ? 4 * make_score(CorneredBishop, CorneredBishop)
-                             : 3 * make_score(CorneredBishop, CorneredBishop);
-                }
-            }
-        }
-    }
-
-    // Rook-specific evaluations
-    if constexpr (Pt == ROOK) {
-        // File evaluation
-        if (pos.is_on_semiopen_file(Us, s)) {
-            score += RookOnOpenFile[pos.is_on_semiopen_file(Them, s)];
-        } else {
-            if (pos.pieces(Us, PAWN) & shift<Down>(pos.pieces()) & file_bb(s)) {
-                score -= RookOnClosedFile;
-            }
-        }
-    }
-
-    // Queen-specific evaluations - SOLO WeakQueen
-    if constexpr (Pt == QUEEN) {
-        // Weak queen penalty
-        Bitboard queenPinners;
-        if (pos.slider_blockers(pos.pieces(Them, ROOK, BISHOP), s, queenPinners)) {
-            score -= WeakQueen;
-        }
-    }
-
-    return score;
-}
-//for detailed trace end
 
 // Evaluation::king() assigns bonuses and penalties to a king of a given color
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us>
 ScoreForClassical Evaluation<T>::king() const {
 
@@ -674,7 +488,7 @@ ScoreForClassical Evaluation<T>::king() const {
 // Evaluation::threats() assigns bonuses according to the types of the
 // attacking and the attacked pieces.
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us>
 ScoreForClassical Evaluation<T>::threats() const {
 
@@ -769,7 +583,7 @@ ScoreForClassical Evaluation<T>::threats() const {
 // Evaluation::passed() evaluates the passed pawns and candidate passed
 // pawns of the given color.
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us>
 ScoreForClassical Evaluation<T>::passed() const {
 
@@ -863,7 +677,7 @@ ScoreForClassical Evaluation<T>::passed() const {
 // on ranks 2 to 4. Completely safe squares behind a friendly pawn are counted twice.
 // Finally, the space bonus is multiplied by a weight which decreases according to occupancy.
 
-template<Tracing T>
+template<Trace::Tracing T>
 template<Color Us>
 ScoreForClassical Evaluation<T>::space() const {
 
@@ -901,7 +715,7 @@ ScoreForClassical Evaluation<T>::space() const {
 // the known attacking/defending status of the players. The final value is derived
 // by interpolation from the midgame and endgame values.
 
-template<Tracing T>
+template<Trace::Tracing T>
 Value Evaluation<T>::winnable(ScoreForClassical score) const {
 
     int outflanking = distance<File>(pos.square<KING>(WHITE), pos.square<KING>(BLACK))
@@ -1037,6 +851,10 @@ Value Evaluation<T>::value() {
     if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
         score += apply_weights(pe->pawn_score(WHITE) - pe->pawn_score(BLACK), PAWN_STRUCTURE_INDEX);
+        if constexpr (T)
+        {
+            Trace::add(PAWN, pe->pawn_score(WHITE), pe->pawn_score(BLACK));
+        }
     }
 
     // Early exit if score is high
@@ -1056,28 +874,73 @@ Value Evaluation<T>::value() {
     //from handicap mode begin
     // Pieces evaluated first (also populates attackedBy, attackedBy2).
     // Note that the order of evaluation of the terms is left unspecified.
-    score += apply_weights(pieces<WHITE, KNIGHT>() - pieces<BLACK, KNIGHT>(), KNIGHT_INDEX)
-           + apply_weights(pieces<WHITE, BISHOP>() - pieces<BLACK, BISHOP>(), BISHOP_INDEX)
-           + apply_weights(pieces<WHITE, ROOK>() - pieces<BLACK, ROOK>(), ROOK_INDEX)
-           + apply_weights(pieces<WHITE, QUEEN>() - pieces<BLACK, QUEEN>(), QUEEN_INDEX);
-    score += apply_weights(mobility[WHITE] - mobility[BLACK], MOBILITY_INDEX);
-    //from handicap mode end
-    // More complex interactions that require fully populated attack bitboards
-    score += apply_weights(king<WHITE>() - king<BLACK>(), KING_SAFETY_INDEX);
+    {
+        ScoreForClassical knights = pieces<WHITE, KNIGHT>() - pieces<BLACK, KNIGHT>();
+        ScoreForClassical bishops = pieces<WHITE, BISHOP>() - pieces<BLACK, BISHOP>();
+        ScoreForClassical rooks   = pieces<WHITE, ROOK>() - pieces<BLACK, ROOK>();
+        ScoreForClassical queens  = pieces<WHITE, QUEEN>() - pieces<BLACK, QUEEN>();
 
+        score += apply_weights(knights, KNIGHT_INDEX) + apply_weights(bishops, BISHOP_INDEX)
+               + apply_weights(rooks, ROOK_INDEX) + apply_weights(queens, QUEEN_INDEX);
+
+        // AGGIUNGI IL TRACING PER I PEZZI
+        if constexpr (T)
+        {
+            Trace::add(KNIGHT, knights);
+            Trace::add(BISHOP, bishops);
+            Trace::add(ROOK, rooks);
+            Trace::add(QUEEN, queens);
+        }
+    }
+    {
+        ScoreForClassical mobilityScore = mobility[WHITE] - mobility[BLACK];
+        score += apply_weights(mobilityScore, MOBILITY_INDEX);
+
+        if constexpr (T)
+        {
+            Trace::add(MOBILITY, mobilityScore);
+        }
+    }
+    //from handicap mode end
+    {
+        ScoreForClassical kingSafetyScore = king<WHITE>() - king<BLACK>();
+        score += apply_weights(kingSafetyScore, KING_SAFETY_INDEX);
+        if constexpr (T)
+        {
+            Trace::add(KING, kingSafetyScore);
+        }
+    }
     //from handicap mode begin
     if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
-        score += apply_weights(passed<WHITE>() - passed<BLACK>(), PASSED_PAWN_INDEX);
+        ScoreForClassical passedScore = passed<WHITE>() - passed<BLACK>();
+        score += apply_weights(passedScore, PASSED_PAWN_INDEX);
+        if constexpr (T)
+        {
+            Trace::add(PASSED, passedScore);
+        }
     }
 
     //from handicap mode end
     if (lazy_skip(LazyThreshold2))
         goto make_v;
 
-    score += apply_weights(threats<WHITE>() - threats<BLACK>(), THREATS_INDEX)
-           + apply_weights(space<WHITE>() - space<BLACK>(), SPACE_INDEX);
-
+    {
+        ScoreForClassical threatsScore = threats<WHITE>() - threats<BLACK>();
+        score += apply_weights(threatsScore, THREATS_INDEX);
+        if constexpr (T)
+        {
+            Trace::add(THREAT, threatsScore);
+        }
+    }
+    {
+        ScoreForClassical spaceScore = space<WHITE>() - space<BLACK>();
+        score += apply_weights(spaceScore, SPACE_INDEX);
+        if constexpr (T)
+        {
+            Trace::add(SPACE, spaceScore);
+        }
+    }
 make_v:
     // Derive single value from mg and eg parts of score
     Value v = apply_weight<EG>(winnable(score), WINNABLE_INDEX);
@@ -1087,8 +950,6 @@ make_v:
     {
         Trace::add(MATERIAL, pos.psq_score());
         Trace::add(IMBALANCE, me->imbalance());
-        Trace::add(PAWN, pe->pawn_score(WHITE), pe->pawn_score(BLACK));
-        Trace::add(MOBILITY, mobility[WHITE], mobility[BLACK]);
     }
 
     // Evaluation grain
@@ -1101,6 +962,10 @@ make_v:
 }
 }
 namespace Eval {
+Value evaluate_position(const Position& pos) {
+    assert(!pos.checkers());
+    return Evaluation<NO_TRACE>(pos).value();
+}
 Value evaluate(const Position& pos) {
 
     assert(!pos.checkers());
@@ -1124,212 +989,35 @@ Value evaluate(const Position& pos) {
     return v;  // Returns final evaluation
 }
 }  // namespace Eval
-// Helper function to format a table row
-static void
-append_term_row(std::stringstream& ss, const char* term_name, int term, const Position& pos) {
-    ss << " " << std::setw(12) << term_name << " | " << std::setw(5)
-       << UCIEngine::to_cp(mg_value(scores[term][WHITE]), pos) << " " << std::setw(5)
-       << UCIEngine::to_cp(eg_value(scores[term][WHITE]), pos) << " | " << std::setw(5)
-       << UCIEngine::to_cp(mg_value(scores[term][BLACK]), pos) << " " << std::setw(5)
-       << UCIEngine::to_cp(eg_value(scores[term][BLACK]), pos) << " | " << std::setw(5)
-       << UCIEngine::to_cp(mg_value(scores[term][WHITE] - scores[term][BLACK]), pos) << " "
-       << std::setw(5) << UCIEngine::to_cp(eg_value(scores[term][WHITE] - scores[term][BLACK]), pos)
-       << " |\n";
-}
+
 // Like evaluate(), but instead of returning a value, it returns
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-
 std::string Eval::trace(Position& pos) {
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
-    std::memset(scores, 0, sizeof(scores));
-    std::memset(Trace::pawn_detail, 0, sizeof(Trace::pawn_detail));
-    std::memset(Trace::knight_detail, 0, sizeof(Trace::knight_detail));
-    std::memset(Trace::bishop_detail, 0, sizeof(Trace::bishop_detail));
-    std::memset(Trace::rook_detail, 0, sizeof(Trace::rook_detail));
-    std::memset(Trace::queen_detail, 0, sizeof(Trace::queen_detail));
+    // Inizializza le strutture per la trace
+    std::memset(Trace::scores, 0, sizeof(Trace::scores));
     std::memset(Trace::mobility_area_counts, 0, sizeof(Trace::mobility_area_counts));
 
     pos.this_thread()->bestValue = VALUE_ZERO;
-
     // Create evaluation object and compute value
-    Evaluation<TRACE> eval(pos);
-    Value             v = eval.value();
+    Evaluation<Trace::TRACE> eval(pos);
+    Value                    v = eval.value();
 
-    v = pos.side_to_move() == WHITE ? v : -v;
+    // Converti il valore al punto di vista del bianco
+    Value       v_white     = (pos.side_to_move() == WHITE) ? v : -v;
+    uint8_t     winProb     = WDLModel::get_win_probability(v_white, pos);
+    std::string shashinZone = get_shashin_zone(winProb, WHITE);
+    std::string gamePhase   = get_game_phase(pos);
 
-    std::stringstream ss;
+    // Ottieni la fase di gioco per l'interpolazione
+    Material::Entry* materialEntry = Material::probe(pos);
+    int              phase         = materialEntry->game_phase();
 
-    // Helper to pretty-print square in algebraic notation
-    auto square_str = [](Square sq) {
-        char file = 'a' + file_of(sq);
-        char rank = '1' + rank_of(sq);
-        return std::string{file, rank};
-    };
-
-    // Helper for unit detail printing - FIXED VERSION
-    auto print_unit_detail = [&](int pt, const char* unit_label) {
-        ss << "  " << unit_label << " detail:\n";
-        for (int c = WHITE; c <= BLACK; ++c)
-        {
-            ss << "    " << (c == WHITE ? "White: " : "Black: ");
-            bool any = false;
-            for (int sq_idx = SQ_A1; sq_idx <= SQ_H8; ++sq_idx)
-            {
-                Square sq = Square(sq_idx);
-                Piece  p  = pos.piece_on(sq);
-                if (type_of(p) == pt && color_of(p) == c)
-                {
-                    ScoreForClassical detail_score = SCORE_ZERO;
-
-                    // Call piece_detail for the specific piece
-                    switch (pt)
-                    {
-                    case PAWN :
-                        if (c == WHITE)
-                            detail_score = eval.pawn_detail<WHITE>(sq);
-                        else
-                            detail_score = eval.pawn_detail<BLACK>(sq);
-                        break;
-                    case KNIGHT :
-                        if (c == WHITE)
-                            detail_score = eval.piece_detail<WHITE, KNIGHT>(sq);
-                        else
-                            detail_score = eval.piece_detail<BLACK, KNIGHT>(sq);
-                        break;
-                    case BISHOP :
-                        if (c == WHITE)
-                            detail_score = eval.piece_detail<WHITE, BISHOP>(sq);
-                        else
-                            detail_score = eval.piece_detail<BLACK, BISHOP>(sq);
-                        break;
-                    case ROOK :
-                        if (c == WHITE)
-                            detail_score = eval.piece_detail<WHITE, ROOK>(sq);
-                        else
-                            detail_score = eval.piece_detail<BLACK, ROOK>(sq);
-                        break;
-                    case QUEEN :
-                        if (c == WHITE)
-                            detail_score = eval.piece_detail<WHITE, QUEEN>(sq);
-                        else
-                            detail_score = eval.piece_detail<BLACK, QUEEN>(sq);
-                        break;
-                    }
-
-                    // Store in trace arrays for consistency
-                    switch (pt)
-                    {
-                    case PAWN :
-                        Trace::pawn_detail[c][sq] = detail_score;
-                        break;
-                    case KNIGHT :
-                        Trace::knight_detail[c][sq] = detail_score;
-                        break;
-                    case BISHOP :
-                        Trace::bishop_detail[c][sq] = detail_score;
-                        break;
-                    case ROOK :
-                        Trace::rook_detail[c][sq] = detail_score;
-                        break;
-                    case QUEEN :
-                        Trace::queen_detail[c][sq] = detail_score;
-                        break;
-                    }
-
-                    int mg = mg_value(detail_score);
-                    int eg = eg_value(detail_score);
-                    ss << square_str(sq) << "(" << mg << "/" << eg << ") ";
-                    any = true;
-                }
-            }
-            if (!any)
-                ss << "(none)";
-            ss << "\n";
-        }
-    };
-    auto print_mobility_area_summary = [&]() {
-            ss << "  Mobility by area:\n";
-            const char* area_names[Trace::AREA_NB] = {"Queen Side", "Center", "King Side"};
-            
-            for (int c = WHITE; c <= BLACK; ++c) {
-                ss << "    " << (c == WHITE ? "White: " : "Black: ");
-                for (int area = 0; area < Trace::AREA_NB; ++area) {
-                    ss << area_names[area] << "(" << Trace::mobility_area_counts[c][area] << ") ";
-                }
-                ss << "\n";
-            }
-            
-            // Aggiungi il totale per colore
-            ss << "    Total: White(";
-            int white_total = 0;
-            for (int area = 0; area < Trace::AREA_NB; ++area) {
-                white_total += Trace::mobility_area_counts[WHITE][area];
-            }
-            ss << white_total << ") Black(";
-            int black_total = 0;
-            for (int area = 0; area < Trace::AREA_NB; ++area) {
-                black_total += Trace::mobility_area_counts[BLACK][area];
-            }
-            ss << black_total << ")\n";
-        };
-    ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2)
-       << "     Term    |    White    |    Black    |    Total   \n"
-       << "             |   MG    EG  |   MG    EG  |   MG    EG \n"
-       << " ------------+-------------+-------------+------------\n";
-
-    append_term_row(ss, "Material", MATERIAL, pos);
-
-    if (Alexander::Eval::handicapConfig.imbalancesToEvaluate)
-    {
-        append_term_row(ss, "Imbalance", IMBALANCE, pos);
-    }
-
-    if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
-    {
-        append_term_row(ss, "Pawns", PAWN, pos);
-        print_unit_detail(PAWN, "Pawns");
-    }
-
-    append_term_row(ss, "Knights", KNIGHT, pos);
-    print_unit_detail(KNIGHT, "Knights");
-
-    append_term_row(ss, "Bishops", BISHOP, pos);
-    print_unit_detail(BISHOP, "Bishops");
-
-    append_term_row(ss, "Rooks", ROOK, pos);
-    print_unit_detail(ROOK, "Rooks");
-
-    append_term_row(ss, "Queens", QUEEN, pos);
-    print_unit_detail(QUEEN, "Queens");
-
-    append_term_row(ss, "Mobility", MOBILITY, pos);
-    print_mobility_area_summary();
-    append_term_row(ss, "King safety", KING, pos);
-    append_term_row(ss, "Threats", THREAT, pos);
-
-    if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
-    {
-        append_term_row(ss, "Passed", PASSED, pos);
-    }
-
-    append_term_row(ss, "Space", SPACE, pos);
-
-    if (Alexander::Eval::handicapConfig.winnableToEvaluate)
-    {
-        append_term_row(ss, "Winnable", WINNABLE, pos);
-    }
-
-    ss << " ------------+-------------+-------------+------------\n";
-    append_term_row(ss, "Total", TOTAL, pos);
-
-    ss << "\nFinal evaluation: " << UCIEngine::to_cp(v, pos) << " ("
-       << (pos.side_to_move() == WHITE ? "white" : "black") << " side)\n";
-
-    return ss.str();
+    // Chiama la funzione di analisi handicap per generare l'output della trace
+    return Eval::trace_analysis(pos, v_white, winProb, shashinZone, gamePhase, phase);
 }
-
 }  // namespace Alexander

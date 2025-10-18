@@ -52,8 +52,12 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
-SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp handicap/evaluate_handicap.cpp main.cpp \
-	material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
+SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp \
+    handicap/evaluate_handicap.cpp handicap/trace/trace.cpp handicap/trace/general.cpp handicap/trace/material_element.cpp \
+	handicap/trace/imbalances.cpp handicap/trace/pawns_element.cpp handicap/trace/passed_pawns.cpp \
+	handicap/trace/knights.cpp handicap/trace/bishops.cpp handicap/trace/major_pieces.cpp handicap/trace/king_safety_and_threats.cpp \
+	handicap/trace/mobility.cpp handicap/trace/space.cpp handicap/trace/winnable.cpp handicap/trace/makogonov.cpp handicap/trace/legal_moves.cpp \
+	main.cpp material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	learn/learn.cpp mcts/montecarlo.cpp  \
 	book/file_mapping.cpp book/book.cpp book/book_manager.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp \
@@ -64,7 +68,12 @@ SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp handicap/
 	livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp \
 	livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp shashin/shashin_manager.cpp shashin/moveconfig.cpp
 
-HEADERS = benchmark.h bitboard.h endgame.h handicap/evaluate_handicap.h material.h misc.h movegen.h movepick.h history.h pawns.h \
+HEADERS = benchmark.h bitboard.h endgame.h \
+        handicap/evaluate_handicap.h handicap/trace/trace.h handicap/trace/general.h handicap/trace/material_element.h \
+		handicap/trace/imbalances.h handicap/trace/pawns_element.h handicap/trace/passed_pawns.h \
+		handicap/trace/knights.h handicap/trace/bishops.h handicap/trace/major_pieces.h handicap/trace/king_safety_and_threats.h \
+		handicap/trace/mobility.h handicap/trace/space.h handicap/trace/winnable.h handicap/trace/makogonov.h handicap/trace/legal_moves.h \
+		material.h misc.h movegen.h movepick.h history.h pawns.h \
 		position.h \
 		psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
 		tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h \
@@ -78,7 +87,7 @@ HEADERS = benchmark.h bitboard.h endgame.h handicap/evaluate_handicap.h material
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/analysis:livebook/json:wdl:handicap
+VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/analysis:livebook/json:wdl:handicap:handicap/trace
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -107,7 +116,6 @@ VPATH = mcts:syzygy:book:book/polyglot:book/ctg:learn:shashin:livebook:livebook/
 # avx2 = yes/no       --- -mavx2             --- Use Intel Advanced Vector Extensions 2
 # avxvnni = yes/no    --- -mavxvnni          --- Use Intel Vector Neural Network Instructions AVX
 # avx512 = yes/no     --- -mavx512bw         --- Use Intel Advanced Vector Extensions 512
-# vnni256 = yes/no    --- -mavx256vnni       --- Use Intel Vector Neural Network Instructions 512 with 256bit operands
 # vnni512 = yes/no    --- -mavx512vnni       --- Use Intel Vector Neural Network Instructions 512
 # avx512icl = yes/no  --- ... multiple ...   --- Use All AVX-512 features available on both Intel Ice Lake and AMD Zen 4
 # altivec = yes/no    --- -maltivec          --- Use PowerPC Altivec SIMD extension
@@ -138,7 +146,7 @@ endif
 # explicitly check for the list of supported architectures (as listed with make help),
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
-                 x86-64-avx512icl x86-64-vnni512 x86-64-vnni256 x86-64-avx512 x86-64-avxvnni \
+                 x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni \
                  x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
@@ -163,7 +171,6 @@ sse41 = no
 avx2 = no
 avxvnni = no
 avx512 = no
-vnni256 = no
 vnni512 = no
 avx512icl = no
 altivec = no
@@ -277,17 +284,6 @@ ifeq ($(findstring -avx512,$(ARCH)),-avx512)
 	avx2 = yes
 	pext = yes
 	avx512 = yes
-endif
-
-ifeq ($(findstring -vnni256,$(ARCH)),-vnni256)
-	popcnt = yes
-	sse = yes
-	sse2 = yes
-	ssse3 = yes
-	sse41 = yes
-	avx2 = yes
-	pext = yes
-	vnni256 = yes
 endif
 
 ifeq ($(findstring -vnni512,$(ARCH)),-vnni512)
@@ -757,17 +753,10 @@ ifeq ($(avx512),yes)
 	endif
 endif
 
-ifeq ($(vnni256),yes)
-	CXXFLAGS += -DUSE_VNNI
-	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl -mprefer-vector-width=256
-	endif
-endif
-
 ifeq ($(vnni512),yes)
 	CXXFLAGS += -DUSE_VNNI
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl -mprefer-vector-width=512
+		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl
 	endif
 endif
 
@@ -937,7 +926,6 @@ help:
 	echo "native                  > select the best architecture for the host processor (default)" && \
 	echo "x86-64-avx512icl        > x86 64-bit with minimum avx512 support of Intel Ice Lake or AMD Zen 4" && \
 	echo "x86-64-vnni512          > x86 64-bit with vnni 512bit support" && \
-	echo "x86-64-vnni256          > x86 64-bit with vnni 512bit support, limit operands to 256bit wide" && \
 	echo "x86-64-avx512           > x86 64-bit with avx512 support" && \
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
 	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
@@ -1036,12 +1024,12 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o ./shashin/*.o ./wdl/*.o ./handicap/*.o 
+	@rm -f alexander alexander.exe *.o ./syzygy/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o ./learn/*.o livebook/*.o livebook/analysis/*.o livebook/json/*.o ./shashin/*.o ./wdl/*.o ./handicap/*.o ./hanicap/trace/*.o 
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda ./shashin/*.gcda ./wdl/*.gcda ./handicap/*.gcda *.s PGOBENCH.out
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda ./learn/*.gcda ./livebook/*.gcda ./shashin/*.gcda ./wdl/*.gcda ./handicap/*.gcda ./handicap/trace/*.gcda *.s PGOBENCH.out
 	@rm -f alexander.profdata *.profraw
 	@rm -f alexander.*args*
 	@rm -f alexander.*lt*
@@ -1079,7 +1067,6 @@ config-sanity:
 	echo "avx2: '$(avx2)'" && \
 	echo "avxvnni: '$(avxvnni)'" && \
 	echo "avx512: '$(avx512)'" && \
-	echo "vnni256: '$(vnni256)'" && \
 	echo "vnni512: '$(vnni512)'" && \
 	echo "avx512icl: '$(avx512icl)'" && \
 	echo "altivec: '$(altivec)'" && \
@@ -1116,7 +1103,6 @@ config-sanity:
 	(test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
 	(test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
 	(test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
-	(test "$(vnni256)" = "yes" || test "$(vnni256)" = "no") && \
 	(test "$(vnni512)" = "yes" || test "$(vnni512)" = "no") && \
 	(test "$(avx512icl)" = "yes" || test "$(avx512icl)" = "no") && \
 	(test "$(altivec)" = "yes" || test "$(altivec)" = "no") && \

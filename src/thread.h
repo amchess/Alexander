@@ -28,6 +28,7 @@
 #include <mutex>
 #include <vector>
 
+#include "memory.h"
 #include "numa.h"
 //for classical begin
 #include "material.h"
@@ -96,7 +97,7 @@ class Thread {
     void   wait_for_search_finished();
     size_t id() const { return idx; }
 
-    std::unique_ptr<Search::Worker> worker;
+    LargePagePtr<Search::Worker> worker;
     //for classical begin
     Pawns::Table          pawnsTable;
     Material::Table       materialTable;
