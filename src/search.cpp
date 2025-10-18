@@ -1084,21 +1084,21 @@ void Search::Worker::do_move(Position& pos, const Move move, StateInfo& st, Stac
     do_move(pos, move, st, pos.gives_check(move), ss);
 }
 
- void Search::Worker::do_move(
-   Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss) {
-     pos.do_move(move, st, givesCheck, &tt);
-     nodes.fetch_add(1, std::memory_order_relaxed);
-     if (ss != nullptr)
-     {
+void Search::Worker::do_move(
+  Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss) {
+    pos.do_move(move, st, givesCheck, &tt);
+    nodes.fetch_add(1, std::memory_order_relaxed);
+    if (ss != nullptr)
+    {
         ss->currentMove = move;
         bool capture    = pos.capture_stage(move);
         ss->continuationHistory =
           &continuationHistory[ss->inCheck][capture][pos.moved_piece(move)][move.to_sq()];
         ss->continuationCorrectionHistory =
           &continuationCorrectionHistory[pos.moved_piece(move)][move.to_sq()];
-     }
- }
- 
+    }
+}
+
 
 void Search::Worker::do_null_move(Position& pos, StateInfo& st) { pos.do_null_move(st, tt); }
 
@@ -1232,12 +1232,12 @@ Value Search::Worker::search(
     int  sibs           = 0;
     // from learning end
     // Step 1. Initialize node
-    ss->inCheck        = pos.checkers();
-    priorCapture       = pos.captured_piece();
-    Color us           = pos.side_to_move();
-    ss->moveCount      = 0;
-    bestValue          = -VALUE_INFINITE;
-    maxValue           = VALUE_INFINITE;
+    ss->inCheck   = pos.checkers();
+    priorCapture  = pos.captured_piece();
+    Color us      = pos.side_to_move();
+    ss->moveCount = 0;
+    bestValue     = -VALUE_INFINITE;
+    maxValue      = VALUE_INFINITE;
     // from Crystal-shashin begin
     gameCycle       = false;
     bool kingDanger = !ourMove && king_danger(pos, us);

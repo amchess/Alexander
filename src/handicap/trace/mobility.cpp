@@ -32,16 +32,16 @@ std::string analyze_mobility(const Position& pos, int phase) {
 
         // Calcola la mobilità per tutte e tre le aree
         int white_queen_side = Trace::mobility_area_counts[WHITE][Trace::QUEEN_SIDE];
-        int white_center = Trace::mobility_area_counts[WHITE][Trace::CENTER];
-        int white_king_side = Trace::mobility_area_counts[WHITE][Trace::KING_SIDE];
+        int white_center     = Trace::mobility_area_counts[WHITE][Trace::CENTER];
+        int white_king_side  = Trace::mobility_area_counts[WHITE][Trace::KING_SIDE];
         int black_queen_side = Trace::mobility_area_counts[BLACK][Trace::QUEEN_SIDE];
-        int black_center = Trace::mobility_area_counts[BLACK][Trace::CENTER];
-        int black_king_side = Trace::mobility_area_counts[BLACK][Trace::KING_SIDE];
+        int black_center     = Trace::mobility_area_counts[BLACK][Trace::CENTER];
+        int black_king_side  = Trace::mobility_area_counts[BLACK][Trace::KING_SIDE];
 
         // Differenze per area (bianco - nero)
         int queen_side_diff = white_queen_side - black_queen_side;
-        int center_diff = white_center - black_center;
-        int king_side_diff = white_king_side - black_king_side;
+        int center_diff     = white_center - black_center;
+        int king_side_diff  = white_king_side - black_king_side;
 
         for (int c = WHITE; c <= BLACK; ++c)
         {
@@ -52,9 +52,8 @@ std::string analyze_mobility(const Position& pos, int phase) {
         }
 
         // Mostra le differenze
-        ss << "    Difference (White-Black): Queen Side(" << queen_side_diff 
-           << ") Center(" << center_diff 
-           << ") King Side(" << king_side_diff << ")\n";
+        ss << "    Difference (White-Black): Queen Side(" << queen_side_diff << ") Center("
+           << center_diff << ") King Side(" << king_side_diff << ")\n";
 
         // Applica il principio di Kasparov
         Color       stronger_side  = total_eval > 0 ? WHITE : BLACK;
@@ -63,42 +62,55 @@ std::string analyze_mobility(const Position& pos, int phase) {
 
         // Determina l'area di attacco per il lato forte
         std::string attack_side;
-        if (stronger_side == WHITE) {
+        if (stronger_side == WHITE)
+        {
             attack_side = "king side";
-        } else {
+        }
+        else
+        {
             attack_side = "queen side";
         }
 
-        std::string kasparov_advice = "Kasparov Principle: try to attack on the " + attack_side + ";";
+        std::string kasparov_advice =
+          "Kasparov Principle: try to attack on the " + attack_side + ";";
         ss << "  " << stronger_color << " has the initiative. " << kasparov_advice << "\n";
 
         // Per il lato debole: determina il settore di contrattacco in base al vantaggio relativo
         int weak_advantage_queen, weak_advantage_center, weak_advantage_king;
-        if (stronger_side == WHITE) {
+        if (stronger_side == WHITE)
+        {
             // Il lato debole è il Nero: il vantaggio del Nero è -differenza
-            weak_advantage_queen = -queen_side_diff;
+            weak_advantage_queen  = -queen_side_diff;
             weak_advantage_center = -center_diff;
-            weak_advantage_king = -king_side_diff;
-        } else {
+            weak_advantage_king   = -king_side_diff;
+        }
+        else
+        {
             // Il lato debole è il Bianco: il vantaggio è la differenza
-            weak_advantage_queen = queen_side_diff;
+            weak_advantage_queen  = queen_side_diff;
             weak_advantage_center = center_diff;
-            weak_advantage_king = king_side_diff;
+            weak_advantage_king   = king_side_diff;
         }
 
         // Trova l'area con il massimo vantaggio per il lato debole
-        int max_advantage = std::max({weak_advantage_queen, weak_advantage_center, weak_advantage_king});
+        int max_advantage =
+          std::max({weak_advantage_queen, weak_advantage_center, weak_advantage_king});
         std::string counterattack_side;
-        if (max_advantage == weak_advantage_queen) {
+        if (max_advantage == weak_advantage_queen)
+        {
             counterattack_side = "queen side";
-        } else if (max_advantage == weak_advantage_center) {
+        }
+        else if (max_advantage == weak_advantage_center)
+        {
             counterattack_side = "center";
-        } else {
+        }
+        else
+        {
             counterattack_side = "king side";
         }
 
         // Raccomandazione per il lato più debole
-        ss << "  " << weaker_color << " should attack on the " << counterattack_side 
+        ss << "  " << weaker_color << " should attack on the " << counterattack_side
            << ", if possible or defend on the " << attack_side << " otherwise.\n";
     };
     ss << "=== MOBILITY SUBELEMENTS ===\n";

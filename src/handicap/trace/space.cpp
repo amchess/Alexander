@@ -17,7 +17,7 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     std::stringstream ss;
     Trace::Helpers::append_term_row(ss, pos, phase, "Space", SPACE);
     ss << "=== SPACE SUBELEMENTS ===\n";
-    
+
     // DETTAGLIO SPAZIO PER AREE
     ss << "Space Detail by Area:\n";
 
@@ -77,20 +77,17 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
 
     // Calcola le differenze
     int queen_side_diff = white_queen_side - black_queen_side;
-    int center_diff = white_center - black_center;
-    int king_side_diff = white_king_side - black_king_side;
+    int center_diff     = white_center - black_center;
+    int king_side_diff  = white_king_side - black_king_side;
 
     // Mostra in formato tabellare
     ss << "                        Queen side   Center   King side\n";
-    ss << "White                      " << std::setw(3) << white_queen_side 
-       << "         " << std::setw(3) << white_center 
-       << "        " << std::setw(3) << white_king_side << "\n";
-    ss << "Black                      " << std::setw(3) << black_queen_side 
-       << "         " << std::setw(3) << black_center 
-       << "        " << std::setw(3) << black_king_side << "\n";
-    ss << "Difference White-Black     " << std::setw(3) << queen_side_diff 
-       << "         " << std::setw(3) << center_diff 
-       << "        " << std::setw(3) << king_side_diff << "\n";
+    ss << "White                      " << std::setw(3) << white_queen_side << "         "
+       << std::setw(3) << white_center << "        " << std::setw(3) << white_king_side << "\n";
+    ss << "Black                      " << std::setw(3) << black_queen_side << "         "
+       << std::setw(3) << black_center << "        " << std::setw(3) << black_king_side << "\n";
+    ss << "Difference White-Black     " << std::setw(3) << queen_side_diff << "         "
+       << std::setw(3) << center_diff << "        " << std::setw(3) << king_side_diff << "\n";
 
     // Calcoliamo anche il totale per ogni colore
     int white_total_space = white_queen_side + white_center + white_king_side;
@@ -102,29 +99,44 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
 
     // Determina il colore con vantaggio e l'area di forza
     int total_diff = white_total_space - black_total_space;
-    if (total_diff > 0) {
+    if (total_diff > 0)
+    {
         // Bianco ha vantaggio
         ss << "White has a space advantage and must increase it on the ";
         // Trova l'area di massimo vantaggio per il Bianco
-        if (queen_side_diff >= center_diff && queen_side_diff >= king_side_diff) {
+        if (queen_side_diff >= center_diff && queen_side_diff >= king_side_diff)
+        {
             ss << "queen side";
-        } else if (center_diff >= queen_side_diff && center_diff >= king_side_diff) {
+        }
+        else if (center_diff >= queen_side_diff && center_diff >= king_side_diff)
+        {
             ss << "center";
-        } else {
+        }
+        else
+        {
             ss << "king side";
         }
-    } else if (total_diff < 0) {
+    }
+    else if (total_diff < 0)
+    {
         // Nero ha vantaggio
         ss << "Black has a space advantage and must increase it on the ";
         // Trova l'area di massimo vantaggio per il Nero (valori negativi più piccoli)
-        if (queen_side_diff <= center_diff && queen_side_diff <= king_side_diff) {
+        if (queen_side_diff <= center_diff && queen_side_diff <= king_side_diff)
+        {
             ss << "queen side";
-        } else if (center_diff <= queen_side_diff && center_diff <= king_side_diff) {
+        }
+        else if (center_diff <= queen_side_diff && center_diff <= king_side_diff)
+        {
             ss << "center";
-        } else {
+        }
+        else
+        {
             ss << "king side";
         }
-    } else {
+    }
+    else
+    {
         ss << "Space is balanced - both players should fight for control of the center";
     }
     ss << "\n";

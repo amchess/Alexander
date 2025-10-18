@@ -21,9 +21,9 @@ std::string analyze_knights(const Position& pos, int phase, const std::string& s
     {
         ss << "=== KNIGHTS SUBELEMENTS ===\n";
         // Calcola la densità d'impacchettamento
-        auto calculate_packing_density = [](const Position& pos, Color c) {
+        auto calculate_packing_density = [](const Position& position, Color c) {
             Bitboard short_range_pieces =
-              pos.pieces(c, KNIGHT) | pos.pieces(c, PAWN) | pos.pieces(c, KING);
+              position.pieces(c, KNIGHT) | position.pieces(c, PAWN) | position.pieces(c, KING);
 
             int piece_count = popcount(short_range_pieces);
             if (piece_count <= 1)
