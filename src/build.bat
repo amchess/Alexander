@@ -5,5 +5,5 @@ REM make -j profile-build
 mingw32-make build COMP=mingw -j %Number_Of_Processors%
 strip alexander.exe
 ren Alexander.exe AlexanderDevBuilt.exe
-make clean
+mingw32-make clean
 pause

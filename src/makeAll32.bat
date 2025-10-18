@@ -8,18 +8,18 @@ strip alexander.exe
 ren alexander.exe "Alexander7-x86-32.exe"
 
 Title "x86-32-old"
-make clean
+mingw32-make clean
 make -f MakeFile profile-build ARCH=x86-32-old COMP=mingw
 strip alexander.exe
 ren alexander.exe "Alexander7-x86-32-old.exe"
 
 Title "general-32"
-make clean
+mingw32-make clean
 make -f MakeFile profile-build ARCH=general-32 COMP=mingw
 strip alexander.exe
 ren alexander.exe "Alexander7-general-32.exe"
 
-make clean
+mingw32-make clean
 SET "PATH=%ORIGINAL_PATH%"
 REM x32 builds end
 
