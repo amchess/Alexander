@@ -366,14 +366,12 @@ std::string analyze_pawns(const Position& pos, int phase) {
         if (closed_center)
         {
             // Struttura Francese: Bianco: d4, e5 vs Nero: d5, e6
-            if ((w_d4 && w_e5 && b_d5 && b_e6)
-                || (b_d4 && b_e5 && w_d5 && w_e3))  // Corretto: w_e3 invece di w_e6
+            if ((w_d4 && w_e5 && b_d5 && b_e6) || (b_d4 && b_e5 && w_d5 && w_e3))
             {
                 return "Closed Center (French Chain)";
             }
             // Struttura Est-Indiana: Bianco: e4, d5 vs Nero: e5, d6
-            if ((w_e4 && w_d5 && b_e5 && b_d6)
-                || (b_e4 && b_d5 && w_e5 && w_d3))  // Corretto: w_d3 invece di w_d6
+            if ((w_e4 && w_d5 && b_e5 && b_d6) || (b_e4 && b_d5 && w_e5 && w_d3))
             {
                 return "Closed Center (King's Indian Chain)";
             }
@@ -438,14 +436,13 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
 
-        // Verifica pedoni sospesi - codice semplificato
+        // Verifica pedoni sospesi - codice semplificato e corretto
         auto has_hanging_pawns = [&](Color color) -> bool {
             Bitboard pawns = pos.pieces(color, PAWN);
 
             for (File f = FILE_B; f <= FILE_G; ++f)
             {
-                File left_f  = File(f - 1);
-                File right_f = File(f + 1);
+                File left_f = File(f - 1);
 
                 Bitboard current_file = pawns & file_bb(f);
                 Bitboard left_file    = pawns & file_bb(left_f);
