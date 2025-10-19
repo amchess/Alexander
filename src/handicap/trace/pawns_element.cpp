@@ -548,4 +548,3 @@ std::string analyze_pawns(const Position& pos, int phase) {
 }
 
 }  // namespace Alexander
-[file content end]
