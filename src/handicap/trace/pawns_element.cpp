@@ -135,55 +135,66 @@ std::string analyze_pawns(const Position& pos, int phase) {
         Color     opponent = ~color;
         Direction push     = pawn_push(color);
 
+        // Definiamo le direzioni per il controllo delle difese
+        Direction defense_dir1 = (color == WHITE) ? SOUTH_WEST : NORTH_WEST;
+        Direction defense_dir2 = (color == WHITE) ? SOUTH_EAST : NORTH_EAST;
+
         for (File f = FILE_A; f <= FILE_H; ++f)
         {
             Bitboard file_pawns = pawns & file_bb(f);
-            if (file_pawns == 0)
-                continue;
-
-            // Trova il pedone più arretrato su questa fila
-            Square back_pawn = (color == WHITE) ? msb(file_pawns) : lsb(file_pawns);
-
-            // Controlla se ci sono pedoni amici sulle file adiacenti che possono difendere
-            bool has_support = false;
-            if (f > FILE_A)
+            while (file_pawns)
             {
-                Bitboard left_file = pawns & file_bb(File(f - 1));
-                if (left_file)
+                Square sq       = pop_lsb(file_pawns);
+                Square sq_front = sq + push;
+
+                // Controlla se il pedone è bloccato da un pedone avversario
+                if (!is_ok(sq_front) || pos.piece_on(sq_front) != make_piece(opponent, PAWN))
+                    continue;
+
+                // Controlla se non può essere difeso da pedoni amici
+                bool can_be_defended = false;
+
+                // Controlla i pedoni sulle colonne adiacenti che potrebbero difenderlo
+                if (f > FILE_A)
                 {
-                    Square support_pawn = (color == WHITE) ? msb(left_file) : lsb(left_file);
-                    if ((color == WHITE && rank_of(support_pawn) >= rank_of(back_pawn))
-                        || (color == BLACK && rank_of(support_pawn) <= rank_of(back_pawn)))
+                    Bitboard left_file = pawns & file_bb(File(f - 1));
+                    while (left_file)
                     {
-                        has_support = true;
+                        Square left_sq = pop_lsb(left_file);
+                        // Un pedone amico può difendere se è sulla stessa traversa o più arretrato
+                        if ((color == WHITE && rank_of(left_sq) <= rank_of(sq))
+                            || (color == BLACK && rank_of(left_sq) >= rank_of(sq)))
+                        {
+                            can_be_defended = true;
+                            break;
+                        }
                     }
                 }
-            }
-            if (f < FILE_H && !has_support)
-            {
-                Bitboard right_file = pawns & file_bb(File(f + 1));
-                if (right_file)
+
+                if (!can_be_defended && f < FILE_H)
                 {
-                    Square support_pawn = (color == WHITE) ? msb(right_file) : lsb(right_file);
-                    if ((color == WHITE && rank_of(support_pawn) >= rank_of(back_pawn))
-                        || (color == BLACK && rank_of(support_pawn) <= rank_of(back_pawn)))
+                    Bitboard right_file = pawns & file_bb(File(f + 1));
+                    while (right_file)
                     {
-                        has_support = true;
+                        Square right_sq = pop_lsb(right_file);
+                        if ((color == WHITE && rank_of(right_sq) <= rank_of(sq))
+                            || (color == BLACK && rank_of(right_sq) >= rank_of(sq)))
+                        {
+                            can_be_defended = true;
+                            break;
+                        }
                     }
                 }
-            }
 
-            // Controlla se il pedone è bloccato da un pedone avversario
-            Square square_ahead = back_pawn + push;
-            bool   is_blocked   = pos.piece_on(square_ahead) == make_piece(opponent, PAWN);
-
-            if (!has_support && is_blocked)
-            {
-                backward |= back_pawn;
+                if (!can_be_defended)
+                {
+                    backward |= sq;
+                }
             }
         }
         return backward;
     };
+
 
     ss << "\nBackward Pawns:\n";
     Bitboard white_backward = find_backward_pawns(WHITE);
@@ -196,61 +207,38 @@ std::string analyze_pawns(const Position& pos, int phase) {
         Bitboard pawns   = pos.pieces(color, PAWN);
         Bitboard hanging = 0;
 
-        // Un pedone è sospeso se è su una colonna semi-aperta e non è supportato da pedoni amici
-        for (File f = FILE_A; f <= FILE_H; ++f)
+        // Cerco coppie di pedoni affiancati sulla stessa traversa
+        for (Rank r = RANK_1; r <= RANK_8; ++r)
         {
-            Bitboard file_pawns = pawns & file_bb(f);
-            if (file_pawns == 0)
-                continue;
-
-            // Controlla se la colonna è semi-aperta (nessun pedone amico davanti)
-            bool     semi_open  = true;
-            Bitboard ahead_mask = (color == WHITE) ? forward_ranks_bb(WHITE, lsb(file_pawns))
-                                                   : forward_ranks_bb(BLACK, lsb(file_pawns));
-            if (pawns & ahead_mask)
-                semi_open = false;
-
-            // Controlla supporto dai pedoni adiacenti
-            bool has_adjacent_support = false;
-            if (f > FILE_A)
+            for (File f = FILE_A; f <= FILE_G; ++f)
             {
-                Bitboard left_adjacent = pawns & file_bb(File(f - 1));
-                if (left_adjacent)
+                Square sq1 = make_square(f, r);
+                Square sq2 = make_square(File(f + 1), r);
+
+                // Se entrambi hanno pedoni del colore
+                if (pos.piece_on(sq1) == make_piece(color, PAWN)
+                    && pos.piece_on(sq2) == make_piece(color, PAWN))
                 {
-                    // Controlla se il pedone adiacente è sulla stessa traversa o una traversa che può supportare
-                    if (color == WHITE)
+
+                    // Controlla che non ci siano pedoni amici sulle colonne adiacenti
+                    bool no_left_pawns  = true;
+                    bool no_right_pawns = true;
+
+                    if (f > FILE_A)
                     {
-                        if (rank_of(lsb(left_adjacent)) >= rank_of(lsb(file_pawns)))
-                            has_adjacent_support = true;
+                        no_left_pawns = (pawns & file_bb(File(f - 1))) == 0;
                     }
-                    else
+                    if (f < FILE_G)
                     {
-                        if (rank_of(lsb(left_adjacent)) <= rank_of(lsb(file_pawns)))
-                            has_adjacent_support = true;
+                        no_right_pawns = (pawns & file_bb(File(f + 2))) == 0;
+                    }
+
+                    if (no_left_pawns && no_right_pawns)
+                    {
+                        hanging |= sq1;
+                        hanging |= sq2;
                     }
                 }
-            }
-            if (f < FILE_H && !has_adjacent_support)
-            {
-                Bitboard right_adjacent = pawns & file_bb(File(f + 1));
-                if (right_adjacent)
-                {
-                    if (color == WHITE)
-                    {
-                        if (rank_of(lsb(right_adjacent)) >= rank_of(lsb(file_pawns)))
-                            has_adjacent_support = true;
-                    }
-                    else
-                    {
-                        if (rank_of(lsb(right_adjacent)) <= rank_of(lsb(file_pawns)))
-                            has_adjacent_support = true;
-                    }
-                }
-            }
-
-            if (semi_open && !has_adjacent_support)
-            {
-                hanging |= file_pawns;
             }
         }
         return hanging;
