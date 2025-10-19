@@ -320,16 +320,28 @@ std::string analyze_pawns(const Position& pos, int phase) {
     // Definizione precisa dei tipi di centro basata sul PDF
     auto analyze_center_type = [&]() -> std::string {
         Square d4_center = SQ_D4, e4_center = SQ_E4, d5_center = SQ_D5, e5_center = SQ_E5;
-        Piece  w_pawn = W_PAWN, b_pawn = B_PAWN;
+        Square d3 = SQ_D3, e3 = SQ_E3, c3 = SQ_C3, f3 = SQ_F3;
+        Square d6 = SQ_D6, e6 = SQ_E6, c6 = SQ_C6, f6 = SQ_F6;
+
+        Piece w_pawn = W_PAWN, b_pawn = B_PAWN;
 
         bool w_d4 = pos.piece_on(d4_center) == w_pawn;
         bool w_e4 = pos.piece_on(e4_center) == w_pawn;
         bool w_d5 = pos.piece_on(d5_center) == w_pawn;
         bool w_e5 = pos.piece_on(e5_center) == w_pawn;
+        bool w_d3 = pos.piece_on(d3) == w_pawn;
+        bool w_e3 = pos.piece_on(e3) == w_pawn;
+        bool w_c3 = pos.piece_on(c3) == w_pawn;
+        bool w_f3 = pos.piece_on(f3) == w_pawn;
+
         bool b_d4 = pos.piece_on(d4_center) == b_pawn;
         bool b_e4 = pos.piece_on(e4_center) == b_pawn;
         bool b_d5 = pos.piece_on(d5_center) == b_pawn;
         bool b_e5 = pos.piece_on(e5_center) == b_pawn;
+        bool b_d6 = pos.piece_on(d6) == b_pawn;
+        bool b_e6 = pos.piece_on(e6) == b_pawn;
+        bool b_c6 = pos.piece_on(c6) == b_pawn;
+        bool b_f6 = pos.piece_on(f6) == b_pawn;
 
         // Conta i pedoni centrali per colore
         int white_center_count = (w_d4 ? 1 : 0) + (w_e4 ? 1 : 0) + (w_d5 ? 1 : 0) + (w_e5 ? 1 : 0);
@@ -341,44 +353,69 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Open Center";
         }
 
-        // 2. Centro CHIUSO: verificare le catene di pedoni
-        // Configurazione Francese: Bianco: d4, e5 vs Nero: d5, e6
-        if ((w_d4 && w_e5 && b_d5 && pos.piece_on(SQ_E6) == b_pawn)
-            || (b_d4 && b_e5 && w_d5 && pos.piece_on(SQ_E6) == w_pawn))
+        // 2. Centro CHIUSO: catene di pedoni bloccate al centro
+        bool closed_center = false;
+        if ((w_d4 && b_d5) || (w_e4 && b_e5) || (w_d5 && b_d4) || (w_e5 && b_e4))
         {
-            return "Closed Center (French Chain)";
-        }
-        // Configurazione e4-d5 vs e5-d6
-        if ((w_e4 && w_d5 && b_e5 && pos.piece_on(SQ_D6) == b_pawn)
-            || (b_e4 && b_d5 && w_e5 && pos.piece_on(SQ_D6) == w_pawn))
-        {
-            return "Closed Center (e4-d5 Chain)";
+            if (!((!w_d4 && !b_d4 && !w_d5 && !b_d5) || (!w_e4 && !b_e4 && !w_e5 && !b_e5)))
+            {
+                closed_center = true;
+            }
         }
 
-        // 3. Centro STATICO: pedoni fissi su una colonna centrale
-        // Caso 1: d4 vs d5 senza pedoni in e4 e e5
-        if ((w_d4 && b_d5) && !w_e4 && !b_e4 && !w_e5 && !b_e5)
+        if (closed_center)
         {
-            return "Static Center (d4-d5)";
-        }
-        // Caso 2: e4 vs e5 senza pedoni in d4 e d5
-        if ((w_e4 && b_e5) && !w_d4 && !b_d4 && !w_d5 && !b_d5)
-        {
-            return "Static Center (e4-e5)";
+            // Struttura Francese: Bianco: d4, e5 vs Nero: d5, e6
+            if ((w_d4 && w_e5 && b_d5 && b_e6)
+                || (b_d4 && b_e5 && w_d5 && w_e3))  // Corretto: w_e3 invece di w_e6
+            {
+                return "Closed Center (French Chain)";
+            }
+            // Struttura Est-Indiana: Bianco: e4, d5 vs Nero: e5, d6
+            if ((w_e4 && w_d5 && b_e5 && b_d6)
+                || (b_e4 && b_d5 && w_e5 && w_d3))  // Corretto: w_d3 invece di w_d6
+            {
+                return "Closed Center (King's Indian Chain)";
+            }
+            return "Closed Center";
         }
 
-        // 4. Centro MOBILE: un giocatore ha due pedoni centrali adiacenti e possono avanzare
-        if (w_d4 && w_e4 && !b_d5 && !b_e5)
+        // 3. Centro STATICO: pedoni centrali fissi su colonne opposte
+        if ((w_d4 && b_d5) && !(w_e4 || b_e4 || w_e5 || b_e5))
+        {
+            bool no_immediate_tension = true;
+            if ((pos.pieces(WHITE, PAWN) & (Rank3BB | Rank4BB))
+                || (pos.pieces(BLACK, PAWN) & (Rank6BB | Rank5BB)))
+            {
+                no_immediate_tension = false;
+            }
+            if (no_immediate_tension)
+                return "Static Center (d4-d5)";
+        }
+
+        if ((w_e4 && b_e5) && !(w_d4 || b_d4 || w_d5 || b_d5))
+        {
+            bool no_immediate_tension = true;
+            if ((pos.pieces(WHITE, PAWN) & (Rank3BB | Rank4BB))
+                || (pos.pieces(BLACK, PAWN) & (Rank6BB | Rank5BB)))
+            {
+                no_immediate_tension = false;
+            }
+            if (no_immediate_tension)
+                return "Static Center (e4-e5)";
+        }
+
+        // 4. Centro MOBILE: un pedone centrale sostenuto da un altro
+        if ((w_d4 && (w_e3 || w_c3)) || (w_e4 && (w_d3 || w_f3)))
         {
             return "Mobile Center";
         }
-        if (b_d5 && b_e5 && !w_d4 && !w_e4)
+        if ((b_d5 && (b_e6 || b_c6)) || (b_e5 && (b_d6 || b_f6)))
         {
             return "Mobile Center";
         }
 
         // 5. Centro DINAMICO: presenza di IQP o Pedoni Sospesi
-        // Funzione per verificare se un pedone è isolato
         auto is_isolated = [&](Color color, Square sq) -> bool {
             File     f       = file_of(sq);
             File     left_f  = File(f - 1);
@@ -391,7 +428,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return true;
         };
 
-        // Verifica IQP per Bianco e Nero
+        // Verifica IQP
         if (w_d4 && is_isolated(WHITE, d4_center))
         {
             return "Dynamic Center (Isolated Queen's Pawn)";
@@ -401,18 +438,30 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
 
-        // Funzione per verificare i pedoni sospesi
+        // Verifica pedoni sospesi - codice semplificato
         auto has_hanging_pawns = [&](Color color) -> bool {
             Bitboard pawns = pos.pieces(color, PAWN);
-            Square   c_sq  = (color == WHITE) ? SQ_C4 : SQ_C5;
-            Square   d_sq  = (color == WHITE) ? SQ_D4 : SQ_D5;
-            if (pos.piece_on(c_sq) == make_piece(color, PAWN)
-                && pos.piece_on(d_sq) == make_piece(color, PAWN))
+
+            for (File f = FILE_B; f <= FILE_G; ++f)
             {
-                File b_file = FILE_B, e_file = FILE_E;
-                if (!(pawns & file_bb(b_file)) && !(pawns & file_bb(e_file)))
+                File left_f  = File(f - 1);
+                File right_f = File(f + 1);
+
+                Bitboard current_file = pawns & file_bb(f);
+                Bitboard left_file    = pawns & file_bb(left_f);
+
+                // Verifica se abbiamo una coppia di pedoni su colonne adiacenti
+                if (popcount(current_file) >= 1 && popcount(left_file) >= 1)
                 {
-                    return true;
+                    // Verifica che non ci siano pedoni amici sulle colonne esterne
+                    File outer_left  = File(f - 2);
+                    File outer_right = File(f + 1);
+
+                    if ((outer_left < FILE_A || !(pawns & file_bb(outer_left)))
+                        && (outer_right > FILE_H || !(pawns & file_bb(outer_right))))
+                    {
+                        return true;
+                    }
                 }
             }
             return false;
@@ -423,10 +472,9 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Dynamic Center (Hanging Pawns)";
         }
 
-        // Se nessuno dei above, restituisce "Dynamic Center" generico
+        // Se nessuno dei casi sopra, restituisce "Dynamic Center" generico
         return "Dynamic Center";
     };
-
     std::string center_type = analyze_center_type();
     ss << "Center Type: " << center_type << "\n";
 
