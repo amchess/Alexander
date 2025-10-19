@@ -313,23 +313,23 @@ std::string analyze_pawns(const Position& pos, int phase) {
        << ", Backward: " << popcount(black_backward) << ", Hanging: " << popcount(black_hanging)
        << ")\n";
 
-    // CENTER TYPE ANALYSIS (Basata sulla classificazione sistematica del PDF)
+    // CENTER TYPE ANALYSIS
     ss << "Center Type Analysis:\n";
     ss << "=====================\n";
 
-    // Definizione precisa dei tipi di centro basata sul PDF
+    // Definizione precisa dei tipi di centro
     auto analyze_center_type = [&]() -> std::string {
-        Square d4 = SQ_D4, e4 = SQ_E4, d5 = SQ_D5, e5 = SQ_E5;
+        Square d4_sq = SQ_D4, e4_sq = SQ_E4, d5_sq = SQ_D5, e5_sq = SQ_E5;
         Piece  w_pawn = W_PAWN, b_pawn = B_PAWN;
 
-        bool w_d4 = pos.piece_on(d4) == w_pawn;
-        bool w_e4 = pos.piece_on(e4) == w_pawn;
-        bool w_d5 = pos.piece_on(d5) == w_pawn;
-        bool w_e5 = pos.piece_on(e5) == w_pawn;
-        bool b_d4 = pos.piece_on(d4) == b_pawn;
-        bool b_e4 = pos.piece_on(e4) == b_pawn;
-        bool b_d5 = pos.piece_on(d5) == b_pawn;
-        bool b_e5 = pos.piece_on(e5) == b_pawn;
+        bool w_d4 = pos.piece_on(d4_sq) == w_pawn;
+        bool w_e4 = pos.piece_on(e4_sq) == w_pawn;
+        bool w_d5 = pos.piece_on(d5_sq) == w_pawn;
+        bool w_e5 = pos.piece_on(e5_sq) == w_pawn;
+        bool b_d4 = pos.piece_on(d4_sq) == b_pawn;
+        bool b_e4 = pos.piece_on(e4_sq) == b_pawn;
+        bool b_d5 = pos.piece_on(d5_sq) == b_pawn;
+        bool b_e5 = pos.piece_on(e5_sq) == b_pawn;
 
         // Conta i pedoni centrali per colore
         int white_center_count = (w_d4 ? 1 : 0) + (w_e4 ? 1 : 0) + (w_d5 ? 1 : 0) + (w_e5 ? 1 : 0);
@@ -392,11 +392,11 @@ std::string analyze_pawns(const Position& pos, int phase) {
         };
 
         // Verifica IQP per Bianco e Nero
-        if (w_d4 && is_isolated(WHITE, d4))
+        if (w_d4 && is_isolated(WHITE, d4_sq))
         {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
-        if (b_d5 && is_isolated(BLACK, d5))
+        if (b_d5 && is_isolated(BLACK, d5_sq))
         {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
@@ -404,10 +404,10 @@ std::string analyze_pawns(const Position& pos, int phase) {
         // Funzione per verificare i pedoni sospesi
         auto has_hanging_pawns = [&](Color color) -> bool {
             Bitboard pawns = pos.pieces(color, PAWN);
-            Square   c4    = (color == WHITE) ? SQ_C4 : SQ_C5;
-            Square   d4    = (color == WHITE) ? SQ_D4 : SQ_D5;
-            if (pos.piece_on(c4) == make_piece(color, PAWN)
-                && pos.piece_on(d4) == make_piece(color, PAWN))
+            Square   c4_sq = (color == WHITE) ? SQ_C4 : SQ_C5;
+            Square   d4_sq = (color == WHITE) ? SQ_D4 : SQ_D5;
+            if (pos.piece_on(c4_sq) == make_piece(color, PAWN)
+                && pos.piece_on(d4_sq) == make_piece(color, PAWN))
             {
                 File b_file = FILE_B, e_file = FILE_E;
                 if (!(pawns & file_bb(b_file)) && !(pawns & file_bb(e_file)))
@@ -548,3 +548,4 @@ std::string analyze_pawns(const Position& pos, int phase) {
 }
 
 }  // namespace Alexander
+[file content end]

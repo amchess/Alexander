@@ -355,7 +355,7 @@ class Worker {
     //Shashin begin
     std::unique_ptr<ShashinManager> shashinManager;
     const Alexander::ShashinConfig& shConfig;
-	friend class Alexander::ThreadPool;
+    friend class Alexander::ThreadPool;
     //Shashin end
     friend class SearchManager;
 };
