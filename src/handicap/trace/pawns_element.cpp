@@ -6,7 +6,6 @@
 #include "../../movegen.h"
 #include "../../bitboard.h"
 #include <sstream>
-
 #include <vector>
 
 namespace Alexander {
@@ -313,81 +312,118 @@ std::string analyze_pawns(const Position& pos, int phase) {
        << " (Doubled: " << popcount(black_doubled) << ", Isolated: " << popcount(black_isolated)
        << ", Backward: " << popcount(black_backward) << ", Hanging: " << popcount(black_hanging)
        << ")\n";
-    // CENTER TYPE ANALYSIS (Intermediate and above)
+
+    // CENTER TYPE ANALYSIS (Basata sulla classificazione sistematica del PDF)
     ss << "Center Type Analysis:\n";
+    ss << "=====================\n";
 
-    // Definizioni dei tipi di centro
+    // Definizione precisa dei tipi di centro basata sul PDF
     auto analyze_center_type = [&]() -> std::string {
-        Bitboard center_squares =
-          (FileCBB | FileDBB | FileEBB | FileFBB) & (Rank3BB | Rank4BB | Rank5BB | Rank6BB);
-        Bitboard white_pawns = pos.pieces(WHITE, PAWN);
-        Bitboard black_pawns = pos.pieces(BLACK, PAWN);
+        Square d4 = SQ_D4, e4 = SQ_E4, d5 = SQ_D5, e5 = SQ_E5;
+        Piece  w_pawn = W_PAWN, b_pawn = B_PAWN;
 
-        // Conta i pedoni centrali per ogni colore
-        Bitboard white_central       = white_pawns & center_squares;
-        Bitboard black_central       = black_pawns & center_squares;
-        int      white_central_count = popcount(white_central);
-        int      black_central_count = popcount(black_central);
+        bool w_d4 = pos.piece_on(d4) == w_pawn;
+        bool w_e4 = pos.piece_on(e4) == w_pawn;
+        bool w_d5 = pos.piece_on(d5) == w_pawn;
+        bool w_e5 = pos.piece_on(e5) == w_pawn;
+        bool b_d4 = pos.piece_on(d4) == b_pawn;
+        bool b_e4 = pos.piece_on(e4) == b_pawn;
+        bool b_d5 = pos.piece_on(d5) == b_pawn;
+        bool b_e5 = pos.piece_on(e5) == b_pawn;
 
-        // 1. Centro APERTO: nessun pedone al centro
-        if (white_central_count == 0 && black_central_count == 0)
+        // Conta i pedoni centrali per colore
+        int white_center_count = (w_d4 ? 1 : 0) + (w_e4 ? 1 : 0) + (w_d5 ? 1 : 0) + (w_e5 ? 1 : 0);
+        int black_center_count = (b_d4 ? 1 : 0) + (b_e4 ? 1 : 0) + (b_d5 ? 1 : 0) + (b_e5 ? 1 : 0);
+
+        // 1. Centro APERTO: nessun pedone sulle 4 case centrali
+        if (white_center_count == 0 && black_center_count == 0)
         {
             return "Open Center";
         }
 
-        // 2. Centro CHIUSO: entrambi i giocatori hanno catene di pedoni al centro
-        // Controlla se ci sono pedoni bloccati che si fronteggiano
-        bool has_pawn_chains = false;
-        for (File f = FILE_C; f <= FILE_F; ++f)
+        // 2. Centro CHIUSO: verificare le catene di pedoni
+        // Configurazione Francese: Bianco: d4, e5 vs Nero: d5, e6
+        if ((w_d4 && w_e5 && b_d5 && pos.piece_on(SQ_E6) == b_pawn)
+            || (b_d4 && b_e5 && w_d5 && pos.piece_on(SQ_E6) == w_pawn))
         {
-            for (Rank r = RANK_3; r <= RANK_6; ++r)
+            return "Closed Center (French Chain)";
+        }
+        // Configurazione e4-d5 vs e5-d6
+        if ((w_e4 && w_d5 && b_e5 && pos.piece_on(SQ_D6) == b_pawn)
+            || (b_e4 && b_d5 && w_e5 && pos.piece_on(SQ_D6) == w_pawn))
+        {
+            return "Closed Center (e4-d5 Chain)";
+        }
+
+        // 3. Centro STATICO: pedoni fissi su una colonna centrale
+        // Caso 1: d4 vs d5 senza pedoni in e4 e e5
+        if ((w_d4 && b_d5) && !w_e4 && !b_e4 && !w_e5 && !b_e5)
+        {
+            return "Static Center (d4-d5)";
+        }
+        // Caso 2: e4 vs e5 senza pedoni in d4 e d5
+        if ((w_e4 && b_e5) && !w_d4 && !b_d4 && !w_d5 && !b_d5)
+        {
+            return "Static Center (e4-e5)";
+        }
+
+        // 4. Centro MOBILE: un giocatore ha due pedoni centrali adiacenti e possono avanzare
+        if (w_d4 && w_e4 && !b_d5 && !b_e5)
+        {
+            return "Mobile Center";
+        }
+        if (b_d5 && b_e5 && !w_d4 && !w_e4)
+        {
+            return "Mobile Center";
+        }
+
+        // 5. Centro DINAMICO: presenza di IQP o Pedoni Sospesi
+        // Funzione per verificare se un pedone è isolato
+        auto is_isolated = [&](Color color, Square sq) -> bool {
+            File     f       = file_of(sq);
+            File     left_f  = File(f - 1);
+            File     right_f = File(f + 1);
+            Bitboard pawns   = pos.pieces(color, PAWN);
+            if (left_f >= FILE_A && (pawns & file_bb(left_f)))
+                return false;
+            if (right_f <= FILE_H && (pawns & file_bb(right_f)))
+                return false;
+            return true;
+        };
+
+        // Verifica IQP per Bianco e Nero
+        if (w_d4 && is_isolated(WHITE, d4))
+        {
+            return "Dynamic Center (Isolated Queen's Pawn)";
+        }
+        if (b_d5 && is_isolated(BLACK, d5))
+        {
+            return "Dynamic Center (Isolated Queen's Pawn)";
+        }
+
+        // Funzione per verificare i pedoni sospesi
+        auto has_hanging_pawns = [&](Color color) -> bool {
+            Bitboard pawns = pos.pieces(color, PAWN);
+            Square   c4    = (color == WHITE) ? SQ_C4 : SQ_C5;
+            Square   d4    = (color == WHITE) ? SQ_D4 : SQ_D5;
+            if (pos.piece_on(c4) == make_piece(color, PAWN)
+                && pos.piece_on(d4) == make_piece(color, PAWN))
             {
-                Square sq = make_square(f, r);
-                Piece  p  = pos.piece_on(sq);
-                if (p == W_PAWN)
+                File b_file = FILE_B, e_file = FILE_E;
+                if (!(pawns & file_bb(b_file)) && !(pawns & file_bb(e_file)))
                 {
-                    Square ahead = sq + NORTH;
-                    if (pos.piece_on(ahead) == B_PAWN)
-                    {
-                        has_pawn_chains = true;
-                        break;
-                    }
-                }
-                else if (p == B_PAWN)
-                {
-                    Square ahead = sq + SOUTH;
-                    if (pos.piece_on(ahead) == W_PAWN)
-                    {
-                        has_pawn_chains = true;
-                        break;
-                    }
+                    return true;
                 }
             }
-            if (has_pawn_chains)
-                break;
-        }
+            return false;
+        };
 
-        // Se entrambi hanno pedoni centrali e ci sono catene, è chiuso
-        if (white_central_count >= 2 && black_central_count >= 2 && has_pawn_chains)
+        if (has_hanging_pawns(WHITE) || has_hanging_pawns(BLACK))
         {
-            return "Closed Center";
+            return "Dynamic Center (Hanging Pawns)";
         }
 
-        // 4. Centro di PEDONI: un giocatore ha pedoni al centro e l'altro no
-        if ((white_central_count >= 2 && black_central_count == 0)
-            || (black_central_count >= 2 && white_central_count == 0))
-        {
-            return "Pawn Center";
-        }
-
-        // 3. Centro STATICO: 1-2 pedoni per lato, situazione stabile
-        if (white_central_count >= 1 && white_central_count <= 2 && black_central_count >= 1
-            && black_central_count <= 2)
-        {
-            return "Static Center";
-        }
-
-        // 5. Centro DINAMICO: situazione non ancora definita
+        // Se nessuno dei above, restituisce "Dynamic Center" generico
         return "Dynamic Center";
     };
 
@@ -398,98 +434,113 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "\nCenter Characteristics:\n";
     if (center_type == "Open Center")
     {
-        ss << "- No pawns in the center\n";
+        ss << "- No pawns in the center (d4, e4, d5, e5)\n";
         ss << "- Maximum piece mobility\n";
         ss << "- Tactical play dominates\n";
         ss << "- Bishops and queens are strong\n";
     }
-    else if (center_type == "Closed Center")
+    else if (center_type.find("Closed Center") != std::string::npos)
     {
         ss << "- Both players have pawn chains in center\n";
         ss << "- Limited piece mobility through center\n";
         ss << "- Play typically develops on the wings\n";
         ss << "- Knights often better than bishops\n";
     }
-    else if (center_type == "Static Center")
+    else if (center_type.find("Static Center") != std::string::npos)
     {
-        ss << "- Both players have 1-2 central pawns\n";
-        ss << "- Stable pawn structure\n";
+        ss << "- Stable pawn structure with opposed pawns in one file\n";
         ss << "- Strategic maneuvering game\n";
         ss << "- Piece placement is crucial\n";
+        ss << "- Both players have some central control\n";
     }
-    else if (center_type == "Pawn Center")
+    else if (center_type == "Mobile Center")
     {
-        ss << "- One player dominates center with pawns\n";
+        ss << "- One player has a mobile pawn center\n";
         ss << "- Space advantage for the controlling side\n";
         ss << "- Potential for pawn expansion\n";
-        ss << "- Controlling side should maintain, other should challenge\n";
+        ss << "- Controlling side should advance, other should block\n";
     }
-    else
-    {  // Dynamic Center
-        ss << "- Center structure is not yet defined\n";
-        ss << "- Multiple pawn breaks possible\n";
+    else if (center_type.find("Dynamic Center") != std::string::npos)
+    {
+        ss << "- Dynamic imbalance between static and dynamic advantages\n";
         ss << "- Tactical opportunities common\n";
-        ss << "- Both sides have active possibilities\n";
+        ss << "- Initiative and piece activity are key\n";
+        if (center_type.find("Isolated Queen's Pawn") != std::string::npos)
+        {
+            ss << "- Features an Isolated Queen's Pawn (IQP)\n";
+        }
+        if (center_type.find("Hanging Pawns") != std::string::npos)
+        {
+            ss << "- Features Hanging Pawns\n";
+        }
     }
 
     // Dettaglio dei pedoni centrali
-    ss << "\nCentral Pawns (c3-c6, d3-d6, e3-e6, f3-f6):\n";
-    Bitboard central_area =
-      (FileCBB | FileDBB | FileEBB | FileFBB) & (Rank3BB | Rank4BB | Rank5BB | Rank6BB);
-    Bitboard central_white = pos.pieces(WHITE, PAWN) & central_area;
-    Bitboard central_black = pos.pieces(BLACK, PAWN) & central_area;
+    ss << "\nCentral Pawns (d4, e4, d5, e5):\n";
+    Bitboard central_squares = (FileDBB | FileEBB) & (Rank4BB | Rank5BB);
+    Bitboard central_white   = pos.pieces(WHITE, PAWN) & central_squares;
+    Bitboard central_black   = pos.pieces(BLACK, PAWN) & central_squares;
     ss << "White: " << bitboard_to_squares(central_white) << "\n";
     ss << "Black: " << bitboard_to_squares(central_black) << "\n";
 
-    // RACCOMANDAZIONI STRATEGICHE
+    // RACCOMANDAZIONI STRATEGICHE PRECISE
     ss << "\nStrategic Recommendations:\n";
     ss << "==========================\n";
 
     if (center_type == "Open Center")
     {
-        ss << "- Activate all pieces quickly\n";
-        ss << "- Bishops and rooks are particularly strong\n";
-        ss << "- Control open files with rooks\n";
-        ss << "- Look for tactical opportunities\n";
+        ss << "- Attack the center and try to occupy it with your pieces\n";
+        ss << "- Use your powerful central position to attack on the wing\n";
+        ss << "- Avoid pawn moves without careful consideration\n";
+        ss << "- Tactical play dominates - focus on concrete variations\n";
+        ss << "- Bishops and rooks are particularly valuable\n";
     }
-    else if (center_type == "Closed Center")
+    else if (center_type.find("Closed Center") != std::string::npos)
     {
+        ss << "- Attack on the wing where you have more activity\n";
+        ss << "- Use pawns to create attacks (pawn storms)\n";
         ss << "- Knights are usually superior to bishops\n";
-        ss << "- Develop play on the queenside or kingside\n";
-        ss << "- Prepare pawn breaks (f4/f5 or c4/c5)\n";
-        ss << "- Avoid premature piece exchanges\n";
+        ss << "- Defender can advance pawns to block attacks\n";
+        ss << "- Counterattack on the opposite wing if necessary\n";
     }
-    else if (center_type == "Static Center")
+    else if (center_type.find("Static Center") != std::string::npos)
     {
-        ss << "- Focus on piece maneuverability\n";
-        ss << "- Improve position of all pieces\n";
-        ss << "- Create weaknesses in opponent's camp\n";
-        ss << "- Patient, strategic play required\n";
+        ss << "- Fight for control of central files and squares\n";
+        ss << "- Place pieces on protected central squares\n";
+        ss << "- Patient, strategic maneuvering game\n";
+        ss << "- Improve position of all pieces gradually\n";
+        ss << "- Consider pawn breaks on wings only when center is controlled\n";
     }
-    else if (center_type == "Pawn Center")
+    else if (center_type == "Mobile Center")
     {
-        if (popcount(central_white) > popcount(central_black))
+        ss << "- Advance your pawn center to gain space and limit opponent's pieces\n";
+        ss << "- Support the pawn advance with your pieces\n";
+        ss << "- Avoid blocking your own pawns\n";
+        ss << "- For the defender: block the pawn advance and pressure the pawns\n";
+    }
+    else if (center_type.find("Dynamic Center") != std::string::npos)
+    {
+        if (center_type.find("Isolated Queen's Pawn") != std::string::npos)
         {
-            ss << "- White: maintain and protect pawn center\n";
-            ss << "- White: look for opportunities to advance pawns\n";
-            ss << "- Black: challenge with pieces and pawn breaks\n";
-            ss << "- Black: try to undermine the pawn center\n";
+            ss << "- For the side with IQP: attack quickly, avoid exchanges, use the initiative\n";
+            ss
+              << "- For the side against IQP: block the pawn, force exchanges, target the weak pawn\n";
+        }
+        else if (center_type.find("Hanging Pawns") != std::string::npos)
+        {
+            ss << "- For the side with hanging pawns: maintain initiative, consider pawn breaks\n";
+            ss
+              << "- For the side against hanging pawns: pressure the pawns, force advances to create weaknesses\n";
         }
         else
         {
-            ss << "- Black: maintain and protect pawn center\n";
-            ss << "- Black: look for opportunities to advance pawns\n";
-            ss << "- White: challenge with pieces and pawn breaks\n";
-            ss << "- White: try to undermine the pawn center\n";
+            ss
+              << "- For the side with dynamic advantage: attack, avoid exchanges, convert initiative\n";
+            ss
+              << "- For the side with static advantage: defend, force exchanges, aim for endgame\n";
         }
     }
-    else
-    {  // Dynamic Center
-        ss << "- Be prepared for tactical skirmishes\n";
-        ss << "- Calculate pawn breaks carefully\n";
-        ss << "- Maintain piece activity and coordination\n";
-        ss << "- Watch for sudden changes in pawn structure\n";
-    }
+
     ss << "\n";
 
     return ss.str();
