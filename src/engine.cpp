@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,9 +32,11 @@
 #include "evaluate.h"
 #include "misc.h"
 //from classical
+#include "numa.h"
 #include "perft.h"
 #include "position.h"
 #include "search.h"
+#include "shm.h"
 #include "syzygy/tbprobe.h"
 #include "types.h"
 #include "uci.h"
@@ -50,10 +52,16 @@ constexpr auto StartFEN   = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq 
 constexpr int  MaxHashMB  = Is64Bit ? 33554432 : 2048;
 int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
+// The default configuration will attempt to group L3 domains up to 32 threads.
+// This size was found to be a good balance between the Elo gain of increased
+// history sharing and the speed loss from more cross-cache accesses (see
+// PR#6526). The user can always explicitly override this behavior.
+constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
+
 Engine::Engine(std::optional<std::string> path) :
     binaryDirectory(CommandLine::get_binary_directory(
       path.value_or(""), CommandLine::get_working_directory())),  //learning
-    numaContext(NumaConfig::from_system()),
+    numaContext(NumaConfig::from_system(DefaultNumaPolicy)),
     states(new std::deque<StateInfo>(1)),
     threads() {
     pos.set(StartFEN, false, &states->back(),
@@ -400,12 +408,12 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
 void Engine::set_numa_config_from_option(const std::string& o) {
     if (o == "auto" || o == "system")
     {
-        numaContext.set_numa_config(NumaConfig::from_system());
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
     }
     else if (o == "hardware")
     {
         // Don't respect affinity set in the system.
-        numaContext.set_numa_config(NumaConfig::from_system(false));
+        numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy, false));
     }
     else if (o == "none")
     {
@@ -431,9 +439,10 @@ void Engine::resize_threads() {
     shCfg.highPetrosian   = options["High Petrosian"];
     shCfg.middlePetrosian = options["Middle Petrosian"];
     shCfg.lowPetrosian    = options["Low Petrosian"];
-    threads.set(numaContext.get_numa_config(), {bookMan, options, threads, tt, shCfg},
+    threads.set(numaContext.get_numa_config(), {bookMan, options, threads, tt, sharedHists, shCfg},
                 updateContext);  //book management from classical
 
+    //from shashin end
     // Reallocate the hash with the new threadpool size
     set_tt_size(options["Hash"]);
     //from classical

@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -145,7 +145,6 @@ double compute_position_complexity(const Position& pos);
 bool   should_apply_perturbation(int uciElo, const Position& pos);
 Value  get_perturbated_value(const Position& pos, Value baseEvaluation);
 Value  get_handicap_value(Value baseEvaluation, int uciElo, const Position& pos);
-bool   isComplex(const Position& pos);
 struct MinMax {
     Value min_value;
     Value max_value;

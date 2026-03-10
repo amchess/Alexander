@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -40,7 +40,50 @@
     #include <cstddef>
     #include <cstdint>
     #include <type_traits>
+//shashchess begin
+    #if defined(__GNUC__) && !defined(__clang__)
+        #if __GNUC__ >= 13
+            #define sf_assume(cond) __attribute__((assume(cond)))
+        #else
+            #define sf_assume(cond) \
+                do \
+                { \
+                    if (!(cond)) \
+                        __builtin_unreachable(); \
+                } while (0)
+        #endif
+    #else
+        // do nothing for other compilers
+        #define sf_assume(cond)
+    #endif
 
+// Definizione ValueList spostata qui
+template<typename T, std::size_t MaxSize>
+class ValueList {
+
+   public:
+    std::size_t size() const { return size_; }
+    int         ssize() const { return int(size_); }
+    void        push_back(const T& value) {
+        assert(size_ < MaxSize);
+        values_[size_++] = value;
+    }
+    const T* begin() const { return values_; }
+    const T* end() const { return values_ + size_; }
+    const T& operator[](int index) const { return values_[index]; }
+
+    T* make_space(size_t count) {
+        T* result = &values_[size_];
+        size_ += count;
+        assert(size_ <= MaxSize);
+        return result;
+    }
+
+   private:
+    T           values_[MaxSize];
+    std::size_t size_ = 0;
+};
+    //shashchess end
     #if defined(_MSC_VER)
         // Disable some silly and noisy warnings from MSVC compiler
         #pragma warning(disable: 4127)  // Conditional expression is constant
@@ -116,7 +159,7 @@ using Bitboard = uint64_t;
 constexpr int MAX_MOVES = 256;
 constexpr int MAX_PLY   = 246;
 
-enum Color : int8_t {
+enum Color : uint8_t {
     WHITE,
     BLACK,
     COLOR_NB = 2
@@ -124,7 +167,7 @@ enum Color : int8_t {
 //learning begin
 constexpr Color Colors[2] = {WHITE, BLACK};
 
-enum CastlingRights : int8_t {
+enum CastlingRights : uint8_t {
     NO_CASTLING,
     WHITE_OO,
     WHITE_OOO = WHITE_OO << 1,
@@ -156,7 +199,7 @@ enum ScaleFactor {
     SCALE_FACTOR_NONE   = 255
 };
 //for classical end
-enum Bound : int8_t {
+enum Bound : uint8_t {
     BOUND_NONE,
     BOUND_UPPER,
     BOUND_LOWER,
@@ -221,13 +264,13 @@ constexpr Value EndgameLimit  = 3915;
 //from classical eval end
 constexpr Value RandomValue = 1200;  //handicap mode Michael Byrne
 // clang-format off
-enum PieceType : std::int8_t {
+enum PieceType : std::uint8_t {
     NO_PIECE_TYPE, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING,
     ALL_PIECES = 0,
     PIECE_TYPE_NB = 8
 };
 
-enum Piece : std::int8_t {
+enum Piece : std::uint8_t {
     NO_PIECE,
     W_PAWN = PAWN,     W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
     B_PAWN = PAWN + 8, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING,
@@ -266,7 +309,7 @@ constexpr Depth DEPTH_UNSEARCHED   = -2;
 constexpr Depth DEPTH_ENTRY_OFFSET = -3;
 
 // clang-format off
-enum Square : int8_t {
+enum Square : uint8_t {
     SQ_A1, SQ_B1, SQ_C1, SQ_D1, SQ_E1, SQ_F1, SQ_G1, SQ_H1,
     SQ_A2, SQ_B2, SQ_C2, SQ_D2, SQ_E2, SQ_F2, SQ_G2, SQ_H2,
     SQ_A3, SQ_B3, SQ_C3, SQ_D3, SQ_E3, SQ_F3, SQ_G3, SQ_H3,
@@ -294,7 +337,7 @@ enum Direction : int8_t {
     NORTH_WEST = NORTH + WEST
 };
 
-enum File : int8_t {
+enum File : uint8_t {
     FILE_A,
     FILE_B,
     FILE_C,
@@ -306,7 +349,7 @@ enum File : int8_t {
     FILE_NB
 };
 
-enum Rank : int8_t {
+enum Rank : uint8_t {
     RANK_1,
     RANK_2,
     RANK_3,
@@ -388,10 +431,10 @@ ENABLE_BASE_OPERATORS_ON(ScoreForClassical)
 //omitted for classical eval
 
 // Additional operators to add a Direction to a Square
-constexpr Square operator+(Square s, Direction d) { return Square(int(s) + int(d)); }
-constexpr Square operator-(Square s, Direction d) { return Square(int(s) - int(d)); }
-inline Square&   operator+=(Square& s, Direction d) { return s = s + d; }
-inline Square&   operator-=(Square& s, Direction d) { return s = s - d; }
+constexpr Square  operator+(Square s, Direction d) { return Square(int(s) + int(d)); }
+constexpr Square  operator-(Square s, Direction d) { return Square(int(s) - int(d)); }
+constexpr Square& operator+=(Square& s, Direction d) { return s = s + d; }
+constexpr Square& operator-=(Square& s, Direction d) { return s = s - d; }
 //for classical begin
 /// Only declared but not defined. We don't want to multiply two scores due to
 /// a very high risk of overflow. So user should explicitly convert to integer.
@@ -470,7 +513,7 @@ constexpr Key make_key(uint64_t seed) {
 }
 
 
-enum MoveType {
+enum MoveType : uint16_t {
     NORMAL,
     PROMOTION  = 1 << 14,
     EN_PASSANT = 2 << 14,
@@ -512,8 +555,6 @@ class Move {
         assert(is_ok());
         return Square(data & 0x3F);
     }
-
-    constexpr int from_to() const { return data & 0xFFF; }
 
     constexpr MoveType type_of() const { return MoveType(data & (3 << 14)); }
 

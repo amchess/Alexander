@@ -6,11 +6,11 @@
 
 namespace Alexander {
 namespace WDLModel {
-const uint8_t MAX_WIN_PROBABILITY = 100;
-struct WDL {       // Structure to represent Win-Draw-Loss in centipawns
-    uint8_t win;   // Win percentage (0-100)
-    uint8_t draw;  // Draw percentage (0-100)
-    uint8_t loss;  // Loss percentage (0-100)
+const uint8_t MAX_WIN_PROBABILITY = 100;  //for classical
+struct WDL {                              // Structure to represent Win-Draw-Loss in centipawns
+    uint8_t win;                          // Win percentage (0-100)
+    uint8_t draw;                         // Draw percentage (0-100)
+    uint8_t loss;                         // Loss percentage (0-100)
 };
 
 void    init();  //inizializes the wdls array

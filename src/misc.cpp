@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ namespace Alexander {
 namespace {
 
 // Version number or dev.
-constexpr std::string_view version = "7";
+constexpr std::string_view version = "8";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -156,12 +156,17 @@ std::string engine_version_info() {
 #endif
     }
 
+// --- NOME PERSONALIZZATO PER GOLD DIGGER ---
+#ifdef GOLD_DIGGER
+    ss << " GoldDigger";
+#endif
+    // -------------------------------------------
     return ss.str();
 }
 
 std::string engine_info(bool to_uci) {
     return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "A. Manzo, F. Ferraguti, K. Kiniama and the Stockfish developers (see AUTHORS file)";
+         + "the Alexander developers (see AUTHORS file)";
 }
 
 
@@ -262,12 +267,12 @@ std::string compiler_info() {
 #if defined(USE_SSE2)
     compiler += " SSE2";
 #endif
-    compiler += (HasPopCnt ? " POPCNT" : "");
 #if defined(USE_NEON_DOTPROD)
     compiler += " NEON_DOTPROD";
 #elif defined(USE_NEON)
     compiler += " NEON";
 #endif
+    compiler += (HasPopCnt ? " POPCNT" : "");
 
 #if !defined(NDEBUG)
     compiler += " DEBUG";

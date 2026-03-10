@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -55,11 +55,10 @@ uint64_t perft(Position& pos, Depth depth) {
     return nodes;
 }
 
-inline uint64_t
-perft(const std::string& fen, Depth depth, bool isChess960, Thread* th) {  //for classical
-    StateListPtr states(new std::deque<StateInfo>(1));
-    Position     p;
-    p.set(fen, isChess960, &states->back(), th);  //for classical
+inline uint64_t perft(const std::string& fen, Depth depth, bool isChess960, Thread* th) {
+    StateInfo st;
+    Position  p;
+    p.set(fen, isChess960, &st, th);
 
     return perft<true>(p, depth);
 }

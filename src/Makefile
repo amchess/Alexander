@@ -1,5 +1,5 @@
 # Alexander, a UCI chess playing engine derived from Stockfish
-# Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers
+# Copyright (C) 2004-2026 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers
 #
 # Alexander is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,6 +25,21 @@ ifeq ($(KERNEL),Linux)
 	OS := $(shell uname -o)
 endif
 
+### Command prefix to run the built executable (e.g. wine, sde, qemu)
+### Backward compatible alias: WINE_PATH (deprecated)
+ifneq ($(strip $(WINE_PATH)),)
+ifeq ($(strip $(RUN_PREFIX)),)
+RUN_PREFIX := $(WINE_PATH)
+endif
+ifeq ($(MAKELEVEL),0)
+ifneq ($(strip $(RUN_PREFIX)),$(strip $(WINE_PATH)))
+$(warning *** Both RUN_PREFIX and WINE_PATH are set; ignoring WINE_PATH. ***)
+else
+$(warning *** WINE_PATH is deprecated; use RUN_PREFIX instead. ***)
+endif
+endif
+endif
+
 ### Target Windows OS
 ifeq ($(OS),Windows_NT)
 	ifneq ($(COMP),ndk)
@@ -32,8 +47,8 @@ ifeq ($(OS),Windows_NT)
 	endif
 else ifeq ($(COMP),mingw)
 	target_windows = yes
-	ifeq ($(WINE_PATH),)
-		WINE_PATH := $(shell which wine)
+	ifeq ($(RUN_PREFIX),)
+		RUN_PREFIX := $(shell which wine)
 	endif
 endif
 
@@ -49,7 +64,7 @@ PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-PGOBENCH = $(WINE_PATH) ./$(EXE) bench
+PGOBENCH = $(RUN_PREFIX) ./$(EXE) bench
 
 ### Source and object files
 SRCS = benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp \
@@ -648,7 +663,9 @@ ifeq ($(COMP),gcc)
 	ifneq ($(gccisclang),)
 		profile_make = clang-profile-make
 		profile_use = clang-profile-use
-	endif
+	else
+		CXXFLAGS += -Wstack-usage=128000
+	endif	
 endif
 
 ### On mingw use Windows threads, otherwise POSIX
@@ -660,6 +677,19 @@ ifneq ($(comp),mingw)
 		ifneq ($(KERNEL),Haiku)
 			ifneq ($(COMP),ndk)
 				LDFLAGS += -lpthread
+
+				add_lrt = yes
+				ifeq ($(target_windows),yes)
+					add_lrt = no
+				endif
+
+				ifeq ($(KERNEL),Darwin)
+					add_lrt = no
+				endif
+
+				ifeq ($(add_lrt),yes)
+					LDFLAGS += -lrt
+				endif
 			endif
 		endif
 	endif
@@ -670,6 +700,7 @@ ifeq ($(debug),no)
 	CXXFLAGS += -DNDEBUG
 else
 	CXXFLAGS += -g
+	CXXFLAGS += -D_GLIBCXX_ASSERTIONS -D_GLIBCXX_DEBUG
 endif
 
 ### 3.2.2 Debugging with undefined behavior sanitizers
@@ -889,7 +920,7 @@ ifeq ($(debug), no)
 # To use LTO and static linking on Windows,
 # the tool chain requires gcc version 10.1 or later.
 	else ifeq ($(comp),mingw)
-		CXXFLAGS += -flto -flto-partition=one
+		CXXFLAGS += -flto=auto -flto-partition=balanced
 		LDFLAGS += $(CXXFLAGS) -save-temps
 	endif
 endif
@@ -1131,7 +1162,7 @@ clang-profile-use:
 	$(XCRUN) $(LLVM_PROFDATA) merge -output=alexander.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
 	EXTRACXXFLAGS='-fprofile-use=alexander.profdata' \
-	EXTRALDFLAGS='-fprofile-use=alexander.profdata' \
+	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
 gcc-profile-make:

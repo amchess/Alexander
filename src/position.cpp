@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "bitboard.h"
+#include "history.h"
 #include "misc.h"
 //shashin
 #include "syzygy/tbprobe.h"
@@ -64,12 +65,15 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
 
     os << "\n +---+---+---+---+---+---+---+---+\n";
 
-    for (Rank r = RANK_8; r >= RANK_1; --r)
+    for (Rank r = RANK_8;; --r)
     {
         for (File f = FILE_A; f <= FILE_H; ++f)
             os << " | " << PieceToChar[pos.piece_on(make_square(f, r))];
 
         os << " | " << (1 + r) << "\n +---+---+---+---+---+---+---+---+\n";
+
+        if (r == RANK_1)
+            break;
     }
 
     os << "   a   b   c   d   e   f   g   h\n"
@@ -82,7 +86,6 @@ std::ostream& operator<<(std::ostream& os, const Position& pos) {
     if (Tablebases::MaxCardinality >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING))
     {
         StateInfo st;
-        //for classical
 
         Position p;
         p.set(pos.fen(), pos.is_chess960(), &st, pos.this_thread());  //for classical
@@ -983,7 +986,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si, Thread* th) 
     Square             sq = SQ_A8;
     std::istringstream ss(fenStr);
 
-    std::memset(this, 0, sizeof(Position));
+    std::memset(reinterpret_cast<char*>(this), 0, sizeof(Position));
     std::memset(si, 0, sizeof(StateInfo));
     st = si;
 
@@ -1124,8 +1127,8 @@ void Position::set_check_info() const {
 // The function is only used when a new position is set up
 void Position::set_state() const {
 
-    st->key = st->materialKey = 0;
-    st->minorPieceKey         = 0;
+    st->key               = 0;
+    st->minorPieceKey     = 0;
     st->nonPawnKey[WHITE] = st->nonPawnKey[BLACK] = 0;
     st->pawnKey                                   = Zobrist::noPawns;
     st->nonPawnMaterial[WHITE] = st->nonPawnMaterial[BLACK] = VALUE_ZERO;
@@ -1163,10 +1166,15 @@ void Position::set_state() const {
         st->key ^= Zobrist::side;
 
     st->key ^= Zobrist::castling[st->castlingRights];
+    st->materialKey = compute_material_key();
+}
 
+Key Position::compute_material_key() const {
+    Key k = 0;
     for (Piece pc : Pieces)
         for (int cnt = 0; cnt < pieceCount[pc]; ++cnt)
-            st->materialKey ^= Zobrist::psq[pc][8 + cnt];
+            k ^= Zobrist::psq[pc][8 + cnt];
+    return k;
 }
 
 
@@ -1198,7 +1206,7 @@ string Position::fen() const {
     int                emptyCnt;
     std::ostringstream ss;
 
-    for (Rank r = RANK_8; r >= RANK_1; --r)
+    for (Rank r = RANK_8;; --r)
     {
         for (File f = FILE_A; f <= FILE_H; ++f)
         {
@@ -1212,8 +1220,9 @@ string Position::fen() const {
                 ss << PieceToChar[piece_on(make_square(f, r))];
         }
 
-        if (r > RANK_1)
-            ss << '/';
+        if (r == RANK_1)
+            break;
+        ss << '/';
     }
 
     ss << (sideToMove == WHITE ? " w " : " b ");
@@ -1508,11 +1517,12 @@ bool Position::gives_check(Move m) const {
 // to a StateInfo object. The move is assumed to be legal. Pseudo-legal
 // moves should be filtered out before this function is called.
 // If a pointer to the TT table is passed, the entry for the new position
-// will be prefetched
+// will be prefetched, and likewise for shared history.
 void Position::do_move(Move                      m,
                        StateInfo&                newSt,
                        bool                      givesCheck,
-                       const TranspositionTable* tt = nullptr) {
+                       const TranspositionTable* tt      = nullptr,
+                       const SharedHistories*    history = nullptr) {
 
     assert(m.is_ok());
     assert(&newSt != st);
@@ -1574,6 +1584,9 @@ void Position::do_move(Move                      m,
                 assert(relative_rank(us, to) == RANK_6);
                 assert(piece_on(to) == NO_PIECE);
                 assert(piece_on(capsq) == make_piece(them, PAWN));
+
+                // Update board and piece lists in ep case, normal captures are updated later
+                remove_piece(capsq);
             }
 
             st->pawnKey ^= Zobrist::psq[captured][capsq];
@@ -1588,13 +1601,11 @@ void Position::do_move(Move                      m,
         }
 
         //for classical
-        // Update board and piece lists
-        remove_piece(capsq);
 
-        prefetch(thisThread->materialTable[st->materialKey]);  //for classical
         k ^= Zobrist::psq[captured][capsq];
-        st->materialKey ^= Zobrist::psq[captured][8 + pieceCount[captured]];
-
+        st->materialKey ^=
+          Zobrist::psq[captured][8 + pieceCount[captured] - (m.type_of() != EN_PASSANT)];
+        prefetch(thisThread->materialTable[st->materialKey]);  //for classical
         // Reset rule 50 counter
         st->rule50 = 0;
     }
@@ -1621,8 +1632,13 @@ void Position::do_move(Move                      m,
     // Move the piece. The tricky Chess960 castling is handled earlier
     if (m.type_of() != CASTLING)
     {
-        //for classical
-        move_piece(from, to);
+        if (captured && m.type_of() != EN_PASSANT)
+        {
+            remove_piece(from);
+            swap_piece(to, pc);
+        }
+        else
+            move_piece(from, to);
     }
 
     // If the moving piece is a pawn do some special extra work
@@ -1640,8 +1656,7 @@ void Position::do_move(Move                      m,
             assert(relative_rank(us, to) == RANK_8);
             assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
 
-            remove_piece(to);
-            put_piece(promotion, to);
+            swap_piece(to, promotion);
 
             //for classical
             // Update hash keys
@@ -1649,7 +1664,7 @@ void Position::do_move(Move                      m,
             k ^= Zobrist::psq[promotion][to];
             st->materialKey ^= Zobrist::psq[promotion][8 + pieceCount[promotion] - 1]
                              ^ Zobrist::psq[pc][8 + pieceCount[pc]];
-
+            st->nonPawnKey[us] ^= Zobrist::psq[promotion][to];
             if (promotionType <= BISHOP)
                 st->minorPieceKey ^= Zobrist::psq[promotion][to];
 
@@ -1670,6 +1685,19 @@ void Position::do_move(Move                      m,
 
         if (type_of(pc) <= BISHOP)
             st->minorPieceKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+    }
+
+    // If en passant is impossible, then k will not change and we can prefetch earlier
+    if (tt && !checkEP)
+        prefetch(tt->first_entry(adjust_key50(k)));
+
+    if (history)
+    {
+        prefetch(&history->pawn_entry(*this)[pc][to]);
+        prefetch(&history->pawn_correction_entry(*this));
+        prefetch(&history->minor_piece_correction_entry(*this));
+        prefetch(&history->nonpawn_correction_entry<WHITE>(*this));
+        prefetch(&history->nonpawn_correction_entry<BLACK>(*this));
     }
 
     // Set capture piece
@@ -1703,7 +1731,7 @@ void Position::do_move(Move                      m,
 
         if (more_than_one(pawns))
         {
-            // If there are two pawns potentially being abled to capture and at least one
+            // If there are two pawns potentially being able to capture and at least one
             // is not pinned, ep is legal as there are no horizontal exposed checks
             if (!more_than_one(blockers_for_king(them) & pawns))
             {
@@ -1759,7 +1787,9 @@ void Position::do_move(Move                      m,
         }
     }
 
+    //for classical
     assert(pos_is_ok());
+    //for classical
 }
 
 
@@ -1825,11 +1855,13 @@ void Position::undo_move(Move m) {
     assert(pos_is_ok());
 }
 
+//for classical
 
 // Helper used to do/undo a castling move. This is a bit
 // tricky in Chess960 where from/to squares can overlap.
 template<bool Do>
-void Position::do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto) {
+void Position::do_castling(
+  Color us, Square from, Square& to, Square& rfrom, Square& rto) {  //for classical
 
     bool kingSide = to > from;
     rfrom         = to;  // Castling is encoded as "king captures friendly rook"
@@ -1839,8 +1871,6 @@ void Position::do_castling(Color us, Square from, Square& to, Square& rfrom, Squ
     // Remove both pieces first since squares could overlap in Chess960
     remove_piece(Do ? from : to);
     remove_piece(Do ? rfrom : rto);
-    board[Do ? from : to] = board[Do ? rfrom : rto] =
-      NO_PIECE;  // remove_piece does not do this for us
     put_piece(make_piece(us, KING), Do ? to : from);
     put_piece(make_piece(us, ROOK), Do ? rto : rfrom);
 }
@@ -2081,10 +2111,13 @@ void Position::flip() {
     string            f, token;
     std::stringstream ss(fen());
 
-    for (Rank r = RANK_8; r >= RANK_1; --r)  // Piece placement
+    for (Rank r = RANK_8;; --r)  // Piece placement
     {
         std::getline(ss, token, r > RANK_1 ? '/' : ' ');
         f.insert(0, token + (f.empty() ? " " : "/"));
+
+        if (r == RANK_1)
+            break;
     }
 
     ss >> token;                        // Active color
@@ -2106,6 +2139,9 @@ void Position::flip() {
 
     assert(pos_is_ok());
 }
+
+
+bool Position::material_key_is_ok() const { return compute_material_key() == st->materialKey; }
 
 
 // Performs some consistency checks for the position object
@@ -2142,7 +2178,7 @@ bool Position::pos_is_ok() const {
 
     for (Piece pc : Pieces)
         if (pieceCount[pc] != popcount(pieces(color_of(pc), type_of(pc)))
-            || pieceCount[pc] != std::count(board, board + SQUARE_NB, pc))
+            || pieceCount[pc] != std::count(board.begin(), board.end(), pc))
             assert(0 && "pos_is_ok: Pieces");
 
     for (Color c : {WHITE, BLACK})
@@ -2156,6 +2192,8 @@ bool Position::pos_is_ok() const {
                 || (castlingRightsMask[square<KING>(c)] & cr) != cr)
                 assert(0 && "pos_is_ok: Castling");
         }
+
+    assert(material_key_is_ok() && "pos_is_ok: materialKey");
 
     return true;
 }

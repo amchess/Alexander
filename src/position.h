@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 Andrea Manzo, F. Ferraguti, K.Kiniama and Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,10 +19,12 @@
 #ifndef POSITION_H_INCLUDED
 #define POSITION_H_INCLUDED
 
+#include <array>
 #include <cassert>
 #include <deque>
 #include <iosfwd>
 #include <memory>
+#include <new>
 #include <string>
 
 #include "bitboard.h"
@@ -31,9 +33,10 @@
 #include "movegen.h"  //shashin
 
 namespace Alexander {
-//larning begin
+//learning begin
 extern void setStartPoint();
 //learning end
+struct SharedHistories;
 class TranspositionTable;
 
 // StateInfo struct stores information needed to restore a Position object to
@@ -97,10 +100,11 @@ class Position {
     Bitboard pieces(PieceTypes... pts) const;
     Bitboard pieces(Color c) const;
     template<typename... PieceTypes>
-    Bitboard pieces(Color c, PieceTypes... pts) const;
-    Piece    piece_on(Square s) const;
-    Square   ep_square() const;
-    bool     empty(Square s) const;
+    Bitboard                            pieces(Color c, PieceTypes... pts) const;
+    Piece                               piece_on(Square s) const;
+    const std::array<Piece, SQUARE_NB>& piece_array() const;
+    Square                              ep_square() const;
+    bool                                empty(Square s) const;
     template<PieceType Pt>
     int count(Color c) const;
     template<PieceType Pt>
@@ -110,7 +114,7 @@ class Position {
     bool   is_on_semiopen_file(Color c, Square s) const;  //for classical
 
     // Castling
-    CastlingRights castling_rights(Color c) const;
+    CastlingRights castling_rights(Color c) const;  //for classical
     bool           can_castle(CastlingRights cr) const;
     bool           castling_impeded(CastlingRights cr) const;
     Square         castling_rook_square(CastlingRights cr) const;
@@ -149,7 +153,8 @@ class Position {
     void do_move(Move                      m,
                  StateInfo&                newSt,
                  bool                      givesCheck,
-                 const TranspositionTable* tt);  //for classical
+                 const TranspositionTable* tt,
+                 const SharedHistories*    worker);  //for classical
     void undo_move(Move m);
     void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
     void undo_null_move();
@@ -182,40 +187,48 @@ class Position {
 
     // Position consistency check, for debugging
     bool pos_is_ok() const;
+    bool material_key_is_ok() const;
     void flip();
 
     StateInfo* state() const;
 
-    void put_piece(Piece pc, Square s);
-    void remove_piece(Square s);
+    void put_piece(Piece pc, Square s);   //for classical
+    void remove_piece(Square s);          //for classical
+    void swap_piece(Square s, Piece pc);  //for classical
 
    private:
     // Initialization helpers (used while setting up a position)
     void set_castling_right(Color c, Square rfrom);
+    Key  compute_material_key() const;
     void set_state() const;
     void set_check_info() const;
 
     // Other helpers
-    void move_piece(Square from, Square to);
+    template<bool PutPiece, bool ComputeRay = true>
+    void update_piece_threats(Piece    pc,
+                              Square   s,
+                              Bitboard noRaysContaining = -1ULL) const;  //for classical
+    void move_piece(Square from, Square to);                             //for classical
     template<bool Do>
     void
         do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);  //for classical
     Key adjust_key50(Key k) const;
 
     // Data members
-    Piece             board[SQUARE_NB];
-    Bitboard          byTypeBB[PIECE_TYPE_NB];
-    Bitboard          byColorBB[COLOR_NB];
-    int               pieceCount[PIECE_NB];
-    int               castlingRightsMask[SQUARE_NB];
-    Square            castlingRookSquare[CASTLING_RIGHT_NB];
-    Bitboard          castlingPath[CASTLING_RIGHT_NB];
-    Thread*           thisThread;  //for classical
-    StateInfo*        st;
-    int               gamePly;
-    Color             sideToMove;
-    ScoreForClassical psq;  //for classical
-    bool              chess960;
+    std::array<Piece, SQUARE_NB>        board;
+    std::array<Bitboard, PIECE_TYPE_NB> byTypeBB;
+    std::array<Bitboard, COLOR_NB>      byColorBB;
+    int                                 pieceCount[PIECE_NB];
+    int                                 castlingRightsMask[SQUARE_NB];
+    Square                              castlingRookSquare[CASTLING_RIGHT_NB];
+    Bitboard                            castlingPath[CASTLING_RIGHT_NB];
+    Thread*                             thisThread;  //for classical
+    StateInfo*                          st;
+    int                                 gamePly;
+    Color                               sideToMove;
+    ScoreForClassical                   psq;  //for classical
+    bool                                chess960;
+    //for classical
 };
 extern void   putQLearningTrajectoryIntoLearningTable();  //learning
 std::ostream& operator<<(std::ostream& os, const Position& pos);
@@ -226,6 +239,8 @@ inline Piece Position::piece_on(Square s) const {
     assert(is_ok(s));
     return board[s];
 }
+
+inline const std::array<Piece, SQUARE_NB>& Position::piece_array() const { return board; }
 
 inline bool Position::empty(Square s) const { return piece_on(s) == NO_PIECE; }
 
@@ -269,9 +284,11 @@ inline bool Position::is_on_semiopen_file(Color c, Square s) const {
 //for classical end
 inline bool Position::can_castle(CastlingRights cr) const { return st->castlingRights & cr; }
 
+//for classical begin
 inline CastlingRights Position::castling_rights(Color c) const {
     return c & CastlingRights(st->castlingRights);
 }
+//for classical end
 
 inline bool Position::castling_impeded(CastlingRights cr) const {
     assert(cr == WHITE_OO || cr == WHITE_OOO || cr == BLACK_OO || cr == BLACK_OOO);
@@ -366,7 +383,7 @@ inline Piece Position::captured_piece() const { return st->capturedPiece; }
 
 inline Thread* Position::this_thread() const { return thisThread; }  //for classical
 
-inline void Position::put_piece(Piece pc, Square s) {
+inline void Position::put_piece(Piece pc, Square s) {  //for classical
 
     board[s] = pc;
     byTypeBB[ALL_PIECES] |= byTypeBB[type_of(pc)] |= s;
@@ -400,8 +417,16 @@ inline void Position::move_piece(Square from, Square to) {
     psq += PSQT::psq[pc][to] - PSQT::psq[pc][from];  //for classical
 }
 
+inline void Position::swap_piece(Square s, Piece pc) {  //for classical
+                                                        //no classical
+
+    remove_piece(s);
+
+    put_piece(pc, s);
+}
+
 inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable* tt = nullptr) {
-    do_move(m, newSt, gives_check(m), tt);
+    do_move(m, newSt, gives_check(m), tt, nullptr);
 }
 
 inline StateInfo* Position::state() const { return st; }

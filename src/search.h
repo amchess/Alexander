@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 Andrea Manzo, F. Ferraguti, K.Kiniama and Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -35,6 +36,7 @@
 #include "misc.h"
 //from classical
 #include "numa.h"
+#include "position.h"
 #include "score.h"
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
@@ -45,7 +47,7 @@
 #include "book/book_manager.h"
 #include <memory>
 #include "shashin/shashin_manager.h"
-//from Alexander end
+//from Shashin end
 
 namespace Alexander {
 
@@ -144,22 +146,25 @@ struct LimitsType {
 // This struct is used to easily forward data to the Search::Worker class.
 struct SharedState {
     //from Polyfish begin
-    SharedState(BookManager&                    bm,
-                const OptionsMap&               optionsMap,
-                ThreadPool&                     threadPool,
-                TranspositionTable&             transpositionTable,
-                const Alexander::ShashinConfig& shCfg) :
+    SharedState(BookManager&                          bm,
+                const OptionsMap&                     optionsMap,
+                ThreadPool&                           threadPool,
+                TranspositionTable&                   transpositionTable,
+                std::map<NumaIndex, SharedHistories>& sharedHists,
+                const Alexander::ShashinConfig&       shCfg) :
         bookMan(bm),
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
-        shashinConfig(shCfg) {}
+        sharedHistories(sharedHists),
+        shashinConfig(shCfg) {}  //shashin
     BookManager& bookMan;
     //from Polyfish end
-    const OptionsMap&              options;
-    ThreadPool&                    threads;
-    TranspositionTable&            tt;
-    const Alexander::ShashinConfig shashinConfig;  //Shashin
+    const OptionsMap&                     options;
+    ThreadPool&                           threads;
+    TranspositionTable&                   tt;
+    std::map<NumaIndex, SharedHistories>& sharedHistories;
+    const Alexander::ShashinConfig        shashinConfig;  //Shashin
 };
 
 class Worker;
@@ -253,7 +258,12 @@ class NullSearchManager: public ISearchManager {
 class Worker {
    public:
     size_t threadIdx;  //mcts
-    Worker(SharedState&, std::unique_ptr<ISearchManager>, size_t, NumaReplicatedAccessToken);
+    Worker(SharedState&,
+           std::unique_ptr<ISearchManager>,
+           size_t,
+           size_t,
+           size_t,
+           NumaReplicatedAccessToken);
     ~Worker();  //shashin
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
@@ -265,6 +275,7 @@ class Worker {
 
     bool is_mainthread() const { return threadIdx == 0; }
 
+    //for classical
     //from Montecarlo begin
     Value minimax_value(Position& pos, Search::Stack* ss, Depth depth);
     Value minimax_value(Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta);
@@ -274,20 +285,17 @@ class Worker {
     ButterflyHistory mainHistory;
     LowPlyHistory    lowPlyHistory;
 
-    CapturePieceToHistory captureHistory;
-    ContinuationHistory   continuationHistory[2][2];
-    PawnHistory           pawnHistory;
-
-    CorrectionHistory<Pawn>         pawnCorrectionHistory;
-    CorrectionHistory<Minor>        minorPieceCorrectionHistory;
-    CorrectionHistory<NonPawn>      nonPawnCorrectionHistory;
+    CapturePieceToHistory           captureHistory;
+    ContinuationHistory             continuationHistory[2][2];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
-    TTMoveHistory                   ttMoveHistory;
-    RootMoves                       rootMoves;                          //mcts
-    Depth                           completedDepth;                     //mcts
-    bool                            nmpGuard = false, nmpSide = false;  //from Crystal-shashin
-    ShashinManager&                 getShashinManager();                //from crystal-Shashin
-    int                             lastShashinUpdatedDepth = 0;        //from shashin
+
+    TTMoveHistory    ttMoveHistory;
+    SharedHistories& sharedHistory;
+    RootMoves        rootMoves;                          //mcts
+    Depth            completedDepth;                     //mcts
+    bool             nmpGuard = false, nmpSide = false;  //from Crystal-shashin
+    ShashinManager&  getShashinManager();                //from crystal-Shashin
+    int              lastShashinUpdatedDepth = 0;        //from shashin
 
    private:
     void iterative_deepening();
@@ -295,7 +303,7 @@ class Worker {
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
     do_move(Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss);
-    void do_null_move(Position& pos, StateInfo& st);
+    void do_null_move(Position& pos, StateInfo& st, Stack* const ss);
     void undo_move(Position& pos, const Move move);
     void undo_null_move(Position& pos);
 
@@ -334,8 +342,8 @@ class Worker {
     Depth rootDepth;  //mcts
     Value rootDelta;
 
-    //for mcts
-    bool                      fullSearch = false;  //full threads patch
+    size_t                    numaThreadIdx, numaTotal;  //for mcts
+    bool                      fullSearch = false;        //full threads patch
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
@@ -352,6 +360,7 @@ class Worker {
     const OptionsMap&   options;
     ThreadPool&         threads;
     TranspositionTable& tt;
+    //for classical
     //Shashin begin
     std::unique_ptr<ShashinManager> shashinManager;
     const Alexander::ShashinConfig& shConfig;

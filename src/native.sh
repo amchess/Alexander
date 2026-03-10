@@ -1,4 +1,6 @@
-make profile-build ARCH=native COMP=gcc
+#!/bin/bash
+make clean
+make profile-build ARCH=native COMP=gcc ENV_CXXFLAGS="-DNNUE_EMBEDDING_OFF" -j$(nproc)
 strip alexander
-mv alexander Alexander7-native
+mv 'alexander' 'Alexander8-native'
 make clean

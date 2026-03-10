@@ -59,7 +59,7 @@ Result& operator|=(Result& r, Result v) { return r = Result(r | v); }
 struct KPKPosition {
     KPKPosition() = default;
     explicit KPKPosition(unsigned idx);
-    operator Result() const { return result; }
+           operator Result() const { return result; }
     Result classify(const std::vector<KPKPosition>& db);
 
     Color  stm;

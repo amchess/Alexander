@@ -1,6 +1,6 @@
 /*
   Alexander, a UCI chess playing engine derived from Stockfish
-  Copyright (C) 2004-2025 The Alexander developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Alexander developers (see AUTHORS file)
 
   Alexander is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -22,12 +22,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "history.h"
 //for classical
 #include "position.h"
 #include "search.h"
@@ -119,6 +121,7 @@ class Engine {
     //for classical
     BookManager                          bookMan;  //book management
     Search::SearchManager::UpdateContext updateContext;
+    std::map<NumaIndex, SharedHistories> sharedHists;
     //for classical
 };
 
