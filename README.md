@@ -152,13 +152,13 @@ If enabled, the engine not only simulates the thought process of a player of a c
 
 #### Avatar File
 A file in .avt format with a player profile. You can edit this file containing the weights of Stockfish's classic evaluation terms, from 0 to 100, but with a private tool, we can generate these values to simulate a real player.
-The private tool first analyzes the player's games and then generates his player card and avatar.
+The private tool first analyzes the player's games and then generates his technical report and avatar.
 In this way, Alexander turns into the player's alter ego, simulating not only his playing strength but also his style:
 no frustration for the OTB player who will not always lose. Once in a while, he will win, and most importantly, he will have an ideal sparring partner to improve.
 The data sheet and our private NLG sw (Virtual trainer) will also allow him to understand his own mistakes verbally, simulating a live instructor!
 Examples:
 
-[Player card](examples/PlayerCard.xlsx)
+[Tehcnical report](https://amchess.github.io/Alexander/examples/my_report.html)
 
 [Avatar](examples/Avatar.avt)
 
