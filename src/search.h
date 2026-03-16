@@ -343,7 +343,8 @@ class Worker {
     Value rootDelta;
 
     size_t                    numaThreadIdx, numaTotal;  //for mcts
-    bool                      fullSearch = false;        //full threads patch
+    bool                      fullSearch      = false;   //full threads patch
+    bool                      antiDancingMode = false;   //anti dancing option
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
