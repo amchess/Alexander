@@ -152,13 +152,13 @@ If enabled, the engine not only simulates the thought process of a player of a c
 
 #### Avatar File
 A file in .avt format with a player profile. You can edit this file containing the weights of Stockfish's classic evaluation terms, from 0 to 100, but with a private tool, we can generate these values to simulate a real player.
-The private tool first analyzes the player's games and then generates his technical report and avatar.
+The private tool first analyzes the player's games and then generates his player card and avatar.
 In this way, Alexander turns into the player's alter ego, simulating not only his playing strength but also his style:
 no frustration for the OTB player who will not always lose. Once in a while, he will win, and most importantly, he will have an ideal sparring partner to improve.
 The data sheet and our private NLG sw (Virtual trainer) will also allow him to understand his own mistakes verbally, simulating a live instructor!
 Examples:
 
-[Technical report](https://amchess.github.io/Alexander/examples/my_report.html)
+[Player card](examples/PlayerCard.xlsx)
 
 [Avatar](examples/Avatar.avt)
 
@@ -285,6 +285,15 @@ If enabled, allows the engine to store a move in the queue of ChessDb to be anal
 ### Full depth threads
 
 _Default 0, min 0, max 512_ The number of threads doing a full depth analysis (brute force). Useful in analysis of particular hard positions to limit the strong pruning's drawbacks. 
+
+### Anti Dancing Analysis
+_Boolean, Default: False_
+Solves one of the most annoying issues when analyzing with modern chess engines: the tendency to "dance" with pieces (repeating the position once or twice) before executing the actual winning plan. Engines normally do this to push the search horizon further or to burn the opponent's clock in practical play, resulting in unnecessarily long, confusing, and unreadable Principal Variations (PVs).
+When this option is set to True, ShashChess will strictly forbid any position repetition when it considers itself to be winning. The engine is forced to immediately discard repetitive maneuvers (scoring them as a draw) and must compute the most direct, linear, and human-readable path to convert the advantage.
+
+Usage Recommendations:
+Deep Analysis (ON): Highly recommended when analyzing games, studying openings, or trying to understand the core strategic plan of a position without useless tactical noise.
+Match Play & Tournaments (OFF): Must be disabled during actual games or engine-vs-engine matches. In some specific scenarios (like pawn endgames), triangulating to lose a tempo via repetition is mathematically the only way to win. If enabled during a game, the engine might throw away a win to avoid the repetition penalty.
 
 ### Variety  (checkbox)
 

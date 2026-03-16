@@ -13,7 +13,7 @@ if not exist alexander.exe (
 )
 
 strip alexander.exe
-ren alexander.exe Alexander8-native-GoldDigger.exe
+ren alexander.exe Alexander8.1-native-GoldDigger.exe
 mingw32-make clean
 
 echo.
