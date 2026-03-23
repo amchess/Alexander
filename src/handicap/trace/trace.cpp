@@ -92,7 +92,6 @@ std::string get_shashin_zone(uint8_t winProb, Color sideToMove) {
 }
 
 // Funzione per calcolare la fase del gioco
-// Funzione per calcolare la fase del gioco
 std::string get_game_phase(const Position& pos) {
     constexpr float kingMatFase   = 3.0f;
     constexpr float queenMatFase  = 9.9f;

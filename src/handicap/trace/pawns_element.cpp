@@ -233,39 +233,45 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_backward) << "\n";
     ss << "Black: " << bitboard_to_squares(black_backward) << "\n";
 
-    // e. PEDONI SOSPESI (HANGING PAWNS) - DEFINIZIONE CORRETTA
+    // e. PEDONI SOSPESI (HANGING PAWNS) - DEFINIZIONE CORRETTA E CENTRALE
     auto find_hanging_pawns = [&](Color color) -> Bitboard {
         Bitboard pawns   = pos.pieces(color, PAWN);
         Bitboard hanging = 0;
+        Bitboard p       = pawns;
 
-        // 1. Trova tutte le coppie di colonne adiacenti che hanno pedoni
-        for (File f = FILE_A; f <= FILE_G; ++f)
+        while (p)
         {
-            File next_f = File(f + 1);
+            Square s = pop_lsb(p);
+            File   f = file_of(s);
+            Rank   r = rank_of(s);
 
-            Bitboard pawns_on_f    = pawns & file_bb(f);
-            Bitboard pawns_on_next = pawns & file_bb(next_f);
-
-            // Se entrambe le colonne hanno almeno un pedone
-            if (pawns_on_f && pawns_on_next)
+            // 1. Devono essere pedoni CENTRALi o semi-centrali (colonne c, d, e).
+            // Se f è FILE_C, la coppia sarà c+d. Se è FILE_D, sarà d+e.
+            if (f >= FILE_C && f <= FILE_E)
             {
-                // 2. Verifica che non ci siano pedoni amici sulle colonne esterne adiacenti
-                File left_outer  = File(f - 1);
-                File right_outer = File(next_f + 1);
+                // 2. Devono essere avanzati (non sulle traverse di partenza)
+                bool is_advanced = (color == WHITE) ? (r >= RANK_3) : (r <= RANK_6);
 
-                bool has_left_outer_pawn = (left_outer >= FILE_A) && (pawns & file_bb(left_outer));
-                bool has_right_outer_pawn =
-                  (right_outer <= FILE_H) && (pawns & file_bb(right_outer));
-
-                // Se non ci sono pedoni sulle colonne esterne adiacenti, abbiamo una coppia di hanging pawns
-                if (!has_left_outer_pawn && !has_right_outer_pawn)
+                // 3. Controlliamo che ci sia il compagno esattamente a destra
+                if (is_advanced && (pawns & square_bb(Square(s + 1))))
                 {
-                    // 3. Aggiungi tutti i pedoni su queste due colonne
-                    hanging |= pawns_on_f | pawns_on_next;
+                    // Abbiamo una Phalanx centrale. Ora controlliamo le colonne esterne.
+                    // Dato che f è tra C ed E, i limiti esterni sono sempre validi (B e F/G)
+                    File left_outer = File(f - 1);
+                    File right_outer =
+                      File(f + 2);  // f+1 è l'altro pedone, f+2 è la colonna esterna destra
+
+                    bool has_left_outer_pawn  = pawns & file_bb(left_outer);
+                    bool has_right_outer_pawn = pawns & file_bb(right_outer);
+
+                    // Se non ci sono alleati sulle colonne esterne, sono veri "Hanging Pawns" centrali
+                    if (!has_left_outer_pawn && !has_right_outer_pawn)
+                    {
+                        hanging |= square_bb(s) | square_bb(Square(s + 1));
+                    }
                 }
             }
         }
-
         return hanging;
     };
 
@@ -393,13 +399,31 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Open Center";
         }
 
-        // 2. Centro CHIUSO: catene di pedoni bloccate al centro
+        // 2. Centro CHIUSO: catene di pedoni bloccate al centro SENZA tensione
+        Bitboard w_center_pawns = pos.pieces(WHITE, PAWN) & (FileDBB | FileEBB);
+        Bitboard b_center_pawns = pos.pieces(BLACK, PAWN) & (FileDBB | FileEBB);
+
+        Bitboard w_center_attacks = pawn_attacks_bb<WHITE>(w_center_pawns);
+        Bitboard b_center_attacks = pawn_attacks_bb<BLACK>(b_center_pawns);
+
+        // C'è tensione se i pedoni centrali possono catturarsi a vicenda
+        bool central_tension =
+          (w_center_attacks & b_center_pawns) || (b_center_attacks & w_center_pawns);
+
         bool closed_center = false;
-        if ((w_d4 && b_d5) || (w_e4 && b_e5) || (w_d5 && b_d4) || (w_e5 && b_e4))
+
+        // Se c'è tensione, NON è un centro chiuso.
+        if (!central_tension)
         {
-            if (!((!w_d4 && !b_d4 && !w_d5 && !b_d5) || (!w_e4 && !b_e4 && !w_e5 && !b_e5)))
+            // Verifichiamo la presenza di almeno un blocco frontale
+            if ((w_d4 && b_d5) || (w_e4 && b_e5) || (w_d5 && b_d6) || (w_e5 && b_e6))
             {
-                closed_center = true;
+                // Un vero centro chiuso richiede pedoni su entrambe le colonne centrali per entrambi i colori
+                if ((w_center_pawns & file_bb(FILE_D)) && (w_center_pawns & file_bb(FILE_E))
+                    && (b_center_pawns & file_bb(FILE_D)) && (b_center_pawns & file_bb(FILE_E)))
+                {
+                    closed_center = true;
+                }
             }
         }
 
@@ -454,57 +478,36 @@ std::string analyze_pawns(const Position& pos, int phase) {
         }
 
         // 5. Centro DINAMICO: presenza di IQP o Pedoni Sospesi
-        auto is_isolated = [&](Color color, Square sq) -> bool {
-            File     f       = file_of(sq);
-            File     left_f  = File(f - 1);
-            File     right_f = File(f + 1);
-            Bitboard pawns   = pos.pieces(color, PAWN);
-            if (left_f >= FILE_A && (pawns & file_bb(left_f)))
-                return false;
-            if (right_f <= FILE_H && (pawns & file_bb(right_f)))
-                return false;
-            return true;
-        };
 
-        // Verifica IQP
-        if (w_d4 && is_isolated(WHITE, d4_center))
+        Bitboard w_pawns = pos.pieces(WHITE, PAWN);
+        Bitboard b_pawns = pos.pieces(BLACK, PAWN);
+
+        // Verifica IQP (Pedone di Donna Isolato)
+        // Definizione blindata con maschere assolute Bitboard:
+        // 1. Il pedone amico deve essere in d4 (Bianco) o d5 (Nero).
+        // 2. Deve essere l'UNICO pedone amico sulla colonna D.
+        // 3. NON ci devono essere pedoni amici sulle colonne C ed E.
+        // 4. NON ci devono essere pedoni avversari sulla colonna D (la colonna deve essere semi-aperta).
+
+        bool w_has_iqp = w_d4 && (popcount(w_pawns & FileDBB) == 1)
+                      && !(w_pawns & (FileCBB | FileEBB)) && !(b_pawns & FileDBB);
+
+        bool b_has_iqp = b_d5 && (popcount(b_pawns & FileDBB) == 1)
+                      && !(b_pawns & (FileCBB | FileEBB)) && !(w_pawns & FileDBB);
+
+        if (w_has_iqp || b_has_iqp)
         {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
-        if (b_d5 && is_isolated(BLACK, d5_center))
+
+        // Verifica pedoni sospesi richiamando la funzione corretta definita sopra
+        if (find_hanging_pawns(WHITE) || find_hanging_pawns(BLACK))
         {
-            return "Dynamic Center (Isolated Queen's Pawn)";
+            return "Dynamic Center (Hanging Pawns)";
         }
 
-        // Verifica pedoni sospesi - codice semplificato e corretto
-        auto has_hanging_pawns = [&](Color color) -> bool {
-            Bitboard pawns = pos.pieces(color, PAWN);
-
-            for (File f = FILE_B; f <= FILE_G; ++f)
-            {
-                File left_f = File(f - 1);
-
-                Bitboard current_file = pawns & file_bb(f);
-                Bitboard left_file    = pawns & file_bb(left_f);
-
-                // Verifica se abbiamo una coppia di pedoni su colonne adiacenti
-                if (popcount(current_file) >= 1 && popcount(left_file) >= 1)
-                {
-                    // Verifica che non ci siano pedoni amici sulle colonne esterne
-                    File outer_left  = File(f - 2);
-                    File outer_right = File(f + 1);
-
-                    if ((outer_left < FILE_A || !(pawns & file_bb(outer_left)))
-                        && (outer_right > FILE_H || !(pawns & file_bb(outer_right))))
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-
-        if (has_hanging_pawns(WHITE) || has_hanging_pawns(BLACK))
+        // Verifica pedoni sospesi richiamando la funzione corretta definita sopra
+        if (find_hanging_pawns(WHITE) || find_hanging_pawns(BLACK))
         {
             return "Dynamic Center (Hanging Pawns)";
         }
@@ -512,6 +515,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
         // Se nessuno dei casi sopra, restituisce "Dynamic Center" generico
         return "Dynamic Center";
     };
+
     std::string center_type = analyze_center_type();
     ss << "Center Type: " << center_type << "\n";
 

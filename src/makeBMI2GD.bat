@@ -13,10 +13,10 @@ if not exist alexander.exe (
 )
 
 strip alexander.exe
-ren alexander.exe "Alexander8.1-x86-64-bmi2-GoldDigger.exe"
+ren alexander.exe "Alexander8.2-x86-64-bmi2-GoldDigger.exe"
 mingw32-make clean
 
 echo.
 echo Compilazione completata con successo!
-echo Eseguibile creato: Alexander8.1-x86-64-bmi2-GoldDigger.exe
+echo Eseguibile creato: Alexander8.2-x86-64-bmi2-GoldDigger.exe
 pause
