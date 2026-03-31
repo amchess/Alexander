@@ -17,10 +17,10 @@ make profile-build ARCH=native COMP=gcc ENV_CXXFLAGS="-DGOLD_DIGGER -DNNUE_EMBED
 # Pulizia dei simboli per ridurre la dimensione del file
 strip alexander
 
-# Rinominiamo l'eseguibile per distinguerlo (uniformato a Alexander8.2)
-mv alexander Alexander8.2-native-GoldDigger
+# Rinominiamo l'eseguibile per distinguerlo (uniformato a Alexander8.3)
+mv alexander Alexander8.3-native-GoldDigger
 
 # Pulizia dei file oggetto intermedi
 make clean
 
-echo "Compilazione completata: Alexander8.2-native-GoldDigger"
+echo "Compilazione completata: Alexander8.3-native-GoldDigger"
