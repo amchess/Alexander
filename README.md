@@ -158,7 +158,7 @@ no frustration for the OTB player who will not always lose. Once in a while, he 
 The data sheet and our private NLG sw (Virtual trainer) will also allow him to understand his own mistakes verbally, simulating a live instructor!
 Examples:
 
-[Player card](examples/PlayerCard.xlsx)
+[Player card](examples/my_report.html)
 
 [Avatar](examples/Avatar.avt)
 
