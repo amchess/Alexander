@@ -103,7 +103,14 @@ class Thread {
     //for classical begin
     Pawns::Table          pawnsTable;
     Material::Table       materialTable;
-    Value                 bestValue;
+    // Used by the lazy evaluation (evaluate.cpp, lazy_skip). It must start from zero:
+    // the search keeps its own local bestValue and never writes this member, so it was
+    // left uninitialised. With a meaningless value the lazy threshold is always exceeded
+    // and the search evaluates material, imbalances and pawns only: pieces, mobility,
+    // king safety, passed pawns, threats and space are skipped (and their avatar weights
+    // have no effect). Eval::trace() sets it to zero, so the trace showed the full
+    // evaluation while the search was using the reduced one.
+    Value                 bestValue = VALUE_ZERO;
     std::atomic<uint64_t> nodes;
     //for classical end
     std::function<void()> jobFunc;

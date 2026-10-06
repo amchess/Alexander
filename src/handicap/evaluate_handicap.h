@@ -28,9 +28,13 @@ namespace Alexander {
 class Position;
 class OptionsMap;  //for classical
 
-namespace {
 //handicap mode begin
-// Evaluation weights, initialized from UCI options
+// Evaluation weights, initialized from UCI options.
+// NOT in an anonymous namespace: there every .cpp file that includes this header gets
+// its own private copy of Weights, so loadAvatar() (evaluate_handicap.cpp) filled one
+// copy and the evaluation (evaluate.cpp) kept reading another, still at 100: the avatar
+// file was loaded "successfully" and had no effect on the play.
+// 'inline' (C++17) gives one single shared array to the whole program.
 enum {
     MATERIAL_INDEX = 0,
     IMBALANCE_INDEX,
@@ -51,7 +55,8 @@ struct Weight {
     std::string mgName;
     std::string egName;
     int         mg, eg;
-} Weights[AVATAR_NB] = {{"Material(mg)", "Material(eg)", 100, 100},
+};
+inline Weight Weights[AVATAR_NB] = {{"Material(mg)", "Material(eg)", 100, 100},
                         {"Imbalance(mg)", "Imbalance(eg)", 100, 100},
                         {"PawnStructure(mg)", "PawnStructure(eg)", 100, 100},
                         {"Knight(mg)", "Knight(eg)", 100, 100},
@@ -65,7 +70,7 @@ struct Weight {
                         {"Space(mg)", "Space(eg)", 100, 100},
                         {"Winnable(mg)", "Winnable(eg)", 100, 100}};
 template<Phase P>
-constexpr Value apply_weight(Value v, int wi) {
+inline Value apply_weight(Value v, int wi) {
     if constexpr (P == MG)
         return v * Weights[wi].mg / 100;
     else if constexpr (P == EG)
@@ -74,7 +79,6 @@ constexpr Value apply_weight(Value v, int wi) {
 
 inline ScoreForClassical apply_weights(ScoreForClassical s, int wi) {
     return make_score(apply_weight<MG>(mg_value(s), wi), apply_weight<EG>(eg_value(s), wi));
-}
 }
 
 namespace Eval {
