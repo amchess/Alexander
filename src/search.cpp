@@ -33,6 +33,7 @@ Local assessments: Penalize or reward based on king's security, tactical complex
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -192,13 +193,15 @@ int livebook_depth_count = 0;
 int max_book_depth       = 255;
 //livebook depth end
 
-std::vector<Livebook::BaseLivebook*> opening_livebooks, endgame_livebooks;
+using Livebooks = std::vector<std::unique_ptr<Livebook::BaseLivebook>>;
+Livebooks opening_livebooks, endgame_livebooks;
 
 std::string _proxy_url;
 bool        _use_lichess_games   = false;
 bool        _use_lichess_masters = false;
 std::string _lichess_player;
 std::string _lichess_player_color;
+std::string _lichess_token;
 bool        _use_chess_db = false;
 
 bool _use_chess_db_tablebase = false;
@@ -236,6 +239,32 @@ void Search::set_lichess_player_color(const std::string& lichess_player_color) {
     update_livebooks();
 }
 
+// Lichess API token, required by the opening explorer since March 2026.
+// Returns false (and ignores the token) if it is not well formed.
+bool Search::set_lichess_token(const std::string& lichess_token) {
+    std::string token = lichess_token;
+
+    // Accept also a token pasted with its "Bearer " prefix
+    if (token.rfind("Bearer ", 0) == 0)
+    {
+        token = token.substr(7);
+    }
+
+    // Lichess tokens match ^[A-Za-z0-9_]+$
+    const bool valid = std::all_of(token.begin(), token.end(), [](const unsigned char c) {
+        return std::isalnum(c) || c == '_';
+    });
+
+    _lichess_token = valid ? token : "";
+    update_livebooks();
+
+    return valid;
+}
+
+void Search::set_livebook_timeout(const int timeout_ms) {
+    Livebook::BaseLivebook::set_timeout(timeout_ms);
+}
+
 void Search::set_use_chess_db(const bool chess_db) {
     _use_chess_db = chess_db;
     update_livebooks();
@@ -252,12 +281,12 @@ void Search::set_use_lichess_tablebase(const bool lichess_tablebase) {
 }
 
 void Search::update_livebooks() {
-    // Clear the existing opening livebooks
+    // Clear (and free) the existing opening livebooks
     opening_livebooks.clear();
 
     if (!_proxy_url.empty())
     {
-        Livebook::Proxy* proxy = new Livebook::Proxy(_proxy_url);
+        auto proxy = std::make_unique<Livebook::Proxy>(_proxy_url);
         if (_proxy_diversity)
         {
             proxy->set_action(Livebook::Action::QUERY);
@@ -266,7 +295,7 @@ void Search::update_livebooks() {
         {
             proxy->set_action(Livebook::Action::QUERY_BEST);
         }
-        opening_livebooks.push_back(proxy);
+        opening_livebooks.push_back(std::move(proxy));
     }
 
     if (!_lichess_player.empty())
@@ -276,38 +305,38 @@ void Search::update_livebooks() {
             _lichess_player_color = "white";
         }
 
-        opening_livebooks.push_back(
-          new Livebook::LichessPlayer(_lichess_player, _lichess_player_color));
+        opening_livebooks.push_back(std::make_unique<Livebook::LichessPlayer>(
+          _lichess_player, _lichess_player_color, _lichess_token));
     }
 
     if (_use_lichess_games)
     {
-        opening_livebooks.push_back(new Livebook::LichessGames());
+        opening_livebooks.push_back(std::make_unique<Livebook::LichessGames>(_lichess_token));
     }
 
     if (_use_lichess_masters)
     {
-        opening_livebooks.push_back(new Livebook::LichessMaster());
+        opening_livebooks.push_back(std::make_unique<Livebook::LichessMaster>(_lichess_token));
     }
 
     if (_use_chess_db)
     {
-        opening_livebooks.push_back(new Livebook::ChessDb());
+        opening_livebooks.push_back(std::make_unique<Livebook::ChessDb>());
     }
 }
 
 void Search::update_online_tablebases() {
-    // Clear the existing endgame livebooks
+    // Clear (and free) the existing endgame livebooks
     endgame_livebooks.clear();
 
     if (_use_chess_db_tablebase)  // ChessDb tablebase
     {
-        endgame_livebooks.push_back(new Livebook::ChessDb());
+        endgame_livebooks.push_back(std::make_unique<Livebook::ChessDb>());
     }
 
     if (_use_lichess_tablebase)  // Lichess tablebase
     {
-        endgame_livebooks.push_back(new Livebook::LichessEndgame());
+        endgame_livebooks.push_back(std::make_unique<Livebook::LichessEndgame>());
     }
 }
 
@@ -495,7 +524,8 @@ void Search::Worker::start_searching() {
             {
                 livebook_depth_count = rootPos.game_ply();
 
-                std::vector<Livebook::BaseLivebook*> livebooks;
+                static const Livebooks no_livebooks;
+                const Livebooks*       livebooks = &no_livebooks;
 
                 // If there are no more than 7 units on the board and there aren't the Syzygy Tbs, use the endgame livebooks
                 const std::string& syzygyPath = static_cast<std::string>(options["SyzygyPath"]);
@@ -507,15 +537,15 @@ void Search::Worker::start_searching() {
                         || ((!syzygyPath.empty())
                             && ((int(options["SyzygyProbeLimit"]) < totalUnits)))))
                 {
-                    livebooks = endgame_livebooks;
+                    livebooks = &endgame_livebooks;
                 }
                 // If we are in the first max_book_depth plies, use the opening livebooks
                 else if (livebook_depth_count < max_book_depth)
                 {
-                    livebooks = opening_livebooks;
+                    livebooks = &opening_livebooks;
                 }
 
-                for (const auto livebook : livebooks)
+                for (const auto& livebook : *livebooks)
                 {
                     if (std::vector<std::pair<std::string, Analysis>> output =
                           livebook->lookup(rootPos);

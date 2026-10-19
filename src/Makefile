@@ -464,6 +464,7 @@ LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
 ifneq ($(OS),Android)
 	CXXFLAGS += -DUSE_LIVEBOOK
+	DEPENDFLAGS += -DUSE_LIVEBOOK
 	ifeq ($(target_windows),yes)
 		LDFLAGS += -DUSE_LIVEBOOK --static $(shell pkg-config --static --libs libcurl)
 	else

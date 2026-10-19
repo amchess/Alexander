@@ -81,8 +81,9 @@ constexpr std::array<uint8_t, 12> maxWinProbabilities = {
 uint8_t get_handicap_max_win_probability(uint8_t wp) {
     auto it = std::lower_bound(maxWinProbabilities.begin(), maxWinProbabilities.end(), wp,
                                std::greater<>());
-    return (it != maxWinProbabilities.end() - 1) ? *(it + 1)
-                                                 : static_cast<uint8_t>(HIGH_PETROSIAN_MAX);
+    // wp below the last threshold: lower_bound() returns end(), never read *(it + 1) there
+    return (it < maxWinProbabilities.end() - 1) ? *(it + 1)
+                                                : static_cast<uint8_t>(HIGH_PETROSIAN_MAX);
 }
 
 constexpr std::array<uint8_t, 12> minWinProbabilities = {

@@ -442,29 +442,28 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Closed Center";
         }
 
-        // 3. Centro STATICO: pedoni centrali fissi su colonne opposte
-        if ((w_d4 && b_d5) && !(w_e4 || b_e4 || w_e5 || b_e5))
+        // 3. Centro STATICO: una coppia di pedoni centrali bloccati (d4-d5 o e4-e5) senza
+        //    tensione immediata: nessun pedone, sulle colonne vicine alla coppia, che la attacchi
+        //    gia' (c4/e4, c5/e5 per d4-d5; d4/f4, d5/f5 per e4-e5) o possa attaccarla con un passo
+        //    (c3/e3, c6/e6; d3/f3, d6/f6).
+        //    Prima il controllo guardava tutti i pedoni bianchi in 3a/4a traversa e tutti i neri
+        //    in 5a/6a, compresa la coppia stessa: d4 (e4) e' in 4a traversa, quindi il centro
+        //    statico non usciva mai.
+        auto no_immediate_tension = [&](Bitboard pairNeighbourFiles) -> bool {
+            return !(pos.pieces(WHITE, PAWN) & pairNeighbourFiles & (Rank3BB | Rank4BB))
+                && !(pos.pieces(BLACK, PAWN) & pairNeighbourFiles & (Rank6BB | Rank5BB));
+        };
+
+        if ((w_d4 && b_d5) && !(w_e4 || b_e4 || w_e5 || b_e5)
+            && no_immediate_tension(FileCBB | FileEBB))
         {
-            bool no_immediate_tension = true;
-            if ((pos.pieces(WHITE, PAWN) & (Rank3BB | Rank4BB))
-                || (pos.pieces(BLACK, PAWN) & (Rank6BB | Rank5BB)))
-            {
-                no_immediate_tension = false;
-            }
-            if (no_immediate_tension)
-                return "Static Center (d4-d5)";
+            return "Static Center (d4-d5)";
         }
 
-        if ((w_e4 && b_e5) && !(w_d4 || b_d4 || w_d5 || b_d5))
+        if ((w_e4 && b_e5) && !(w_d4 || b_d4 || w_d5 || b_d5)
+            && no_immediate_tension(FileDBB | FileFBB))
         {
-            bool no_immediate_tension = true;
-            if ((pos.pieces(WHITE, PAWN) & (Rank3BB | Rank4BB))
-                || (pos.pieces(BLACK, PAWN) & (Rank6BB | Rank5BB)))
-            {
-                no_immediate_tension = false;
-            }
-            if (no_immediate_tension)
-                return "Static Center (e4-e5)";
+            return "Static Center (e4-e5)";
         }
 
         // 4. Centro MOBILE: un pedone centrale sostenuto da un altro

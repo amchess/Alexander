@@ -6,7 +6,7 @@
 namespace Alexander::Livebook {
 class LichessUsers final: public LichessOpening {
    public:
-    LichessUsers();
+    explicit LichessUsers(std::string token_);
 };
 };
 

@@ -243,17 +243,30 @@ The proxy URL to use for the live book. If empty, no proxy is used. The proxy sh
 _Boolean, Default: False_  
 If enabled, the engine will play a random (best) move by the proxy (query and not querybest action).
 
+#### LiveBook Lichess Token
+_String, Default: "" (empty string)_  
+Personal API token of a Lichess account. Since March 2026 the Lichess opening explorer (`explorer.lichess.org`) only answers authenticated requests, so this token is required by **LiveBook Lichess Games**, **LiveBook Lichess Masters** and **LiveBook Lichess Player**. Create it at https://lichess.org/account/oauth/token without selecting any scope: a token without scopes can only read public data. The Lichess Tablebase does not need it. If the token is missing or refused, the engine prints an `info string` and disables these live books until the LiveBook options are changed.
+
+#### LiveBook Timeout
+_Integer, Default: 5000, Min: 100, Max: 60000_  
+Maximum duration in milliseconds of a live book or online tablebase request (the lookup is done on the engine's clock). After a network or server error the live book is paused for 30 seconds, after a rate limit (HTTP 429) for 60 seconds.
+
 #### LiveBook Lichess Games
 _Boolean, Default: False_  
-If enabled, the engine will use the Lichess live book by querying the Lichess API to access the game database available on the site. This option allows the engine to access a wide range of games played on Lichess to enhance its move choices.
+If enabled, the engine will use the Lichess live book by querying the Lichess API to access the game database available on the site. This option allows the engine to access a wide range of games played on Lichess to enhance its move choices. Requires **LiveBook Lichess Token**.  
+Only the games of the players in the rating band of the engine are used. The engine Elo is **UCI_Elo** / **ELO_CB** when **UCI_LimitStrength** / **LimitStrength_CB** is enabled, otherwise the engine maximum (3190):
+- **Beginner** (up to 1999): Lichess players rated 1200-1999
+- **Intermediate** (2000-2199): Lichess players rated 2000-2199
+- **Advanced** (2200-2399): Lichess players rated 2200-2499 (Lichess has no 2400 group)
+- **Expert** (2400-3190): Lichess players rated 2500 and more
 
 #### LiveBook Lichess Masters
 _Boolean, Default: False_  
-If enabled, the engine will use the Lichess live book specifically for masters' games. This allows the engine to analyze games played at a high level and utilize the best moves made by master-level players.
+If enabled, the engine will use the Lichess live book specifically for masters' games. This allows the engine to analyze games played at a high level and utilize the best moves made by master-level players. Requires **LiveBook Lichess Token**.
 
 #### LiveBook Lichess Player
 _String, Default: "" (empty string)_  
-The Lichess player name to use for the live book. If left empty, the engine will not query for the specific player's game data. This option is useful for studying or adapting the engine to a particular player's style.
+The Lichess player name to use for the live book. If left empty, the engine will not query for the specific player's game data. This option is useful for studying or adapting the engine to a particular player's style. Requires **LiveBook Lichess Token**.
 
 #### LiveBook Lichess Player Color
 _String, Default: "White"_  

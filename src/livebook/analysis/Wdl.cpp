@@ -89,7 +89,8 @@ bool Wdl::operator<(const Wdl& other) const {
         return false;
     }
 
-    return losses < other.losses;
+    // Same wins and draws: the one with more losses is the worse
+    return losses > other.losses;
 }
 
 bool Wdl::operator>(const Wdl& other) const { return !(*this < other || *this == other); }

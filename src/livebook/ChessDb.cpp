@@ -40,7 +40,7 @@ ChessDb::parse_move(const Position& position_, std::string& item_, bool check_ra
 
     int         rank = 0;
     std::string uci;
-    auto        analysis = new Analysis();
+    Analysis    analysis;
 
     while (std::getline(stream, token, ','))
     {
@@ -53,6 +53,7 @@ ChessDb::parse_move(const Position& position_, std::string& item_, bool check_ra
 
             if (check_rank_ && rank < this->min_rank)
             {
+                uci = "";  // "move" comes before "rank": discard the move
                 break;
             }
         }
@@ -73,13 +74,13 @@ ChessDb::parse_move(const Position& position_, std::string& item_, bool check_ra
         {
             auto score_value = std::stoi(value);
             auto score       = new Cp(score_value);
-            analysis->set_centi_pawns(score);
+            analysis.set_centi_pawns(score);
         }
         else if (key == "mate")
         {
             auto mate_value = std::stoi(value);
             auto mate       = new Mate(mate_value);
-            analysis->set_mate(mate);
+            analysis.set_mate(mate);
         }
         else if (key == "winrate")
         {
@@ -87,11 +88,11 @@ ChessDb::parse_move(const Position& position_, std::string& item_, bool check_ra
             auto     wins      = static_cast<uint32_t>(std::round(wdl_value * 10));
             uint32_t losses    = 1000 - wins;
             auto     wdl       = new Wdl(wins, 0, losses);
-            analysis->set_wdl(wdl);
+            analysis.set_wdl(wdl);
         }
     }
 
-    auto element = std::pair(uci, *analysis);
+    auto element = std::pair(uci, analysis);
 
     return element;
 }
@@ -157,7 +158,7 @@ std::vector<std::pair<std::string, Analysis>> ChessDb::lookup(const Position& po
 
     auto ret = std::vector<std::pair<std::string, Analysis>>();
 
-    if (const CURLcode res = do_request(full_uri); res != CURLE_OK)
+    if (!fetch(full_uri))
     {
         return ret;
     }

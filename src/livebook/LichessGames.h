@@ -7,7 +7,14 @@
 namespace Alexander::Livebook {
 class LichessGames final: public LichessOpening {
    public:
-    LichessGames();
+    explicit LichessGames(std::string token_);
+
+   protected:
+    // Only the games of the Lichess players in the rating band of the engine
+    std::string format_url(const Position& position_) override;
+
+   private:
+    std::string lastBand;  // To report the band only when it changes
 };
 }
 
