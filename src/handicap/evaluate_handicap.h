@@ -57,18 +57,18 @@ struct Weight {
     int         mg, eg;
 };
 inline Weight Weights[AVATAR_NB] = {{"Material(mg)", "Material(eg)", 100, 100},
-                        {"Imbalance(mg)", "Imbalance(eg)", 100, 100},
-                        {"PawnStructure(mg)", "PawnStructure(eg)", 100, 100},
-                        {"Knight(mg)", "Knight(eg)", 100, 100},
-                        {"Bishop(mg)", "Bishop(eg)", 100, 100},
-                        {"Rook(mg)", "Rook(eg)", 100, 100},
-                        {"Queen(mg)", "Queen(eg)", 100, 100},
-                        {"Mobility(mg)", "Mobility(eg)", 100, 100},
-                        {"KingSafety(mg)", "KingSafety(eg)", 100, 100},
-                        {"Threats(mg)", "Threats(eg)", 100, 100},
-                        {"PassedPawns(mg)", "PassedPawns(eg)", 100, 100},
-                        {"Space(mg)", "Space(eg)", 100, 100},
-                        {"Winnable(mg)", "Winnable(eg)", 100, 100}};
+                                    {"Imbalance(mg)", "Imbalance(eg)", 100, 100},
+                                    {"PawnStructure(mg)", "PawnStructure(eg)", 100, 100},
+                                    {"Knight(mg)", "Knight(eg)", 100, 100},
+                                    {"Bishop(mg)", "Bishop(eg)", 100, 100},
+                                    {"Rook(mg)", "Rook(eg)", 100, 100},
+                                    {"Queen(mg)", "Queen(eg)", 100, 100},
+                                    {"Mobility(mg)", "Mobility(eg)", 100, 100},
+                                    {"KingSafety(mg)", "KingSafety(eg)", 100, 100},
+                                    {"Threats(mg)", "Threats(eg)", 100, 100},
+                                    {"PassedPawns(mg)", "PassedPawns(eg)", 100, 100},
+                                    {"Space(mg)", "Space(eg)", 100, 100},
+                                    {"Winnable(mg)", "Winnable(eg)", 100, 100}};
 template<Phase P>
 inline Value apply_weight(Value v, int wi) {
     if constexpr (P == MG)

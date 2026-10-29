@@ -101,8 +101,8 @@ class Thread {
 
     LargePagePtr<Search::Worker> worker;
     //for classical begin
-    Pawns::Table          pawnsTable;
-    Material::Table       materialTable;
+    Pawns::Table    pawnsTable;
+    Material::Table materialTable;
     // Used by the lazy evaluation (evaluate.cpp, lazy_skip). It must start from zero:
     // the search keeps its own local bestValue and never writes this member, so it was
     // left uninitialised. With a meaningless value the lazy threshold is always exceeded
