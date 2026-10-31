@@ -7,18 +7,17 @@
 #include "winnable.h"
 
 namespace Alexander {
+namespace Eval {
 
 using namespace Trace;
 
-namespace Eval {
-
 std::string analyze_winnable(const Position& pos, int phase) {
+    (void)pos; (void)phase; // Silence compiler warnings for unused variables
     std::stringstream ss;
-    Trace::Helpers::append_term_row(ss, pos, phase, "Winnable", WINNABLE);
-    ss << "\n";
+    // We intentionally return an empty string here to mute the redundant "Winnable" header.
+    // Win Probability is already handled in the General Information block.
     return ss.str();
 }
 
-}
-
-}  // namespace Alexander
+} // namespace Eval
+} // namespace Alexander

@@ -1020,4 +1020,4 @@ std::string Eval::trace(Position& pos) {
     // Chiama la funzione di analisi handicap per generare l'output della trace
     return Eval::trace_analysis(pos, v_white, winProb, shashinZone, gamePhase, phase);
 }
-}  // namespace Alexander
+}  // namespace Alexander=
