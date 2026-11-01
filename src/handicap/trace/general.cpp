@@ -1,4 +1,8 @@
+#include "../../evaluate.h"
 #include "general.h"
+#include "../evaluate_handicap.h"
+#include "../../uci.h"
+#include "../../movegen.h"
 #include <iomanip>
 #include <sstream>
 #include "trace.h"
@@ -6,10 +10,25 @@
 namespace Alexander {
 namespace Eval {
 
-std::string generate_general_info(Position& pos, Value v_white, uint8_t winProb, 
-                                  const std::string& shashinZone, const std::string& gamePhase) {
+std::string generate_general_info(Position&          pos,
+                                  Value              v_white,
+                                  uint8_t            winProb,
+                                  const std::string& shashinZone,
+                                  const std::string& gamePhase) {
     std::stringstream ss;
 
+    // =========================================================================
+    // BLOCCO 1: OUTPUT ORIGINALE INTATTO AL 100%
+    // =========================================================================
+    ss << "=== GENERAL INFORMATION ===\n";
+    ss << "Final evaluation: " << UCIEngine::to_cp(v_white, pos)
+       << " (Win Probability: " << static_cast<int>(winProb) << "%)\n";
+    ss << "Shashin Zone: " << shashinZone << "\n";
+    ss << "Game Phase: " << gamePhase << "\n\n";
+
+    // =========================================================================
+    // BLOCCO 2: OUTPUT AGGIORNATO (ADVANCED MODULES)
+    // =========================================================================
     // Retrieve the total scores extracted from the evaluation to compare MG vs EG
     ScoreForClassical w_tot = Trace::scores[Trace::TOTAL][WHITE];
     ScoreForClassical b_tot = Trace::scores[Trace::TOTAL][BLACK];
@@ -18,13 +37,8 @@ std::string generate_general_info(Position& pos, Value v_white, uint8_t winProb,
     int mg_adv = mg_value(pov_tot);
     int eg_adv = eg_value(pov_tot);
 
-    // Basic Header
-    ss << "=== GENERAL INFORMATION ===\n"
-       << "Final evaluation: " << std::fixed << std::setprecision(2) << (float)v_white / 100.0 
-       << " (Win Probability: " << (int)winProb << "%)\n"
-       << "Game Phase: " << gamePhase << "\n"
-       << "Shashin Zone: " << shashinZone << "\n";
-
+    ss << "=== ADVANCED GENERAL MODULES ===\n";
+    
     // 1. Practical explanation of the Shashin Zone
     ss << "Strategic Outlook: ";
     if (shashinZone.find("Capablanca") != std::string::npos) {
@@ -56,10 +70,18 @@ std::string generate_general_info(Position& pos, Value v_white, uint8_t winProb,
     return ss.str();
 }
 
-// ... [Keep your generate_main_table function down here untouched] ...
 std::string generate_main_table() {
     std::stringstream ss;
     
+    // =========================================================================
+    // BLOCCO 1: OUTPUT ORIGINALE INTATTO AL 100%
+    // =========================================================================
+    ss << "     ELEMENT     |   MG     EG   Total\n";
+    ss << " -------------+--------------------\n";
+
+    // =========================================================================
+    // BLOCCO 2: OUTPUT AGGIORNATO (DETAILED EVALUATION MATRIX)
+    // =========================================================================
     // Helper lambda to format MG and EG scores neatly
     auto format_score = [](ScoreForClassical s) {
         std::stringstream tmp;
@@ -81,10 +103,10 @@ std::string generate_main_table() {
         return row.str();
     };
 
-    ss << "=== DETAILED EVALUATION MATRIX ===\n";
+    ss << "\n=== DETAILED EVALUATION MATRIX ===\n";
     ss << "   +------------------+-------------+-------------+-------------+\n"
        << "   | Feature          |    White    |    Black    |  Advantage  |\n"
-       << "   |                  |   MG    EG  |   MG    EG  |   MG    EG  |\n"
+       << "   |                  |  MG    EG   |  MG    EG   |  MG    EG   |\n"
        << "   +------------------+-------------+-------------+-------------+\n";
 
     // Static & Material Features
@@ -125,6 +147,6 @@ std::string generate_main_table() {
 
     return ss.str();
 }
-}
 
+}  // namespace Eval
 }  // namespace Alexander

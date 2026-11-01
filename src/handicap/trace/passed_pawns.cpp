@@ -1,6 +1,6 @@
 #include "../../evaluate.h"
 #include "trace.h"
-#include "passed_pawns.h" 
+#include "passed_pawns.h"
 #include "../evaluate_handicap.h"
 #include "../../pawns.h"
 #include "../../uci.h"
@@ -10,14 +10,102 @@
 #include <iomanip>
 
 namespace Alexander {
-namespace Eval {
 
 using namespace Trace;
 
+namespace Eval {
+
 std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, int phase) {
-    (void)phase; // Silence warning
     std::stringstream ss;
-    ss << "=== PASSED PAWNS SUBELEMENTS ===\n";
+    
+    // =========================================================================
+    // BLOCCO 1: OUTPUT ORIGINALE INTATTO AL 100%
+    // =========================================================================
+    Trace::Helpers::append_term_row(ss, pos, phase, "Passed", PASSED);
+    ss << "=== Passed Pawns SUBELEMENTS ===\n";
+    Bitboard white_passed = pawnEntry->passed_pawns(WHITE);
+    Bitboard black_passed = pawnEntry->passed_pawns(BLACK);
+    ss << "White: " << Trace::Helpers::bitboard_to_squares(white_passed) << "\n";
+    ss << "Black: " << Trace::Helpers::bitboard_to_squares(black_passed) << "\n";
+
+    // Analisi dettagliata dei pedoni passati (Originale)
+    auto analyze_passed_pawns_orig = [&](Color color) {
+        Bitboard  passed = (color == WHITE) ? white_passed : black_passed;
+        Direction push   = pawn_push(color);
+
+        while (passed)
+        {
+            Square pawn_sq = pop_lsb(passed);
+            Rank   rank    = rank_of(pawn_sq);
+            File   file    = file_of(pawn_sq);
+
+            ss << "  " << Trace::Helpers::square_to_string(pawn_sq) << ": ";
+
+            // Distanza dalla promozione
+            int steps_to_promotion = (color == WHITE) ? (7 - rank) : rank;
+            ss << steps_to_promotion << " steps to promotion";
+
+            // Controlla se il pedone è supportato
+            bool supported = false;
+            if (file > FILE_A)
+            {
+                Square left_support = pawn_sq + push + WEST;
+                if (pos.piece_on(left_support) == make_piece(color, PAWN))
+                {
+                    supported = true;
+                }
+            }
+            if (file < FILE_H && !supported)
+            {
+                Square right_support = pawn_sq + push + EAST;
+                if (pos.piece_on(right_support) == make_piece(color, PAWN))
+                {
+                    supported = true;
+                }
+            }
+            ss << (supported ? " (supported)" : " (unsupported)");
+
+            // Controlla se il pedone è bloccato
+            Square square_ahead = pawn_sq + push;
+            bool   blocked      = pos.piece_on(square_ahead) != NO_PIECE;
+            ss << (blocked ? " (blocked)" : " (free)");
+
+            // Valuta la forza del pedone passato in base alla traversa
+            if ((color == WHITE && rank >= RANK_5) || (color == BLACK && rank <= RANK_4))
+            {
+                ss << " - strong";
+            }
+            else if ((color == WHITE && rank <= RANK_3) || (color == BLACK && rank >= RANK_6))
+            {
+                ss << " - weak";
+            }
+            else
+            {
+                ss << " - medium";
+            }
+
+            ss << "\n";
+        }
+    };
+
+    if (white_passed)
+    {
+        ss << "White passed pawns detail:\n";
+        analyze_passed_pawns_orig(WHITE);
+    }
+
+    if (black_passed)
+    {
+        ss << "Black passed pawns detail:\n";
+        analyze_passed_pawns_orig(BLACK);
+    }
+    ss << "\n";
+
+    // =========================================================================
+    // BLOCCO 2: OUTPUT AGGIORNATO (ADVANCED PASSED PAWNS MODULES)
+    // =========================================================================
+    ss << "================================================================\n";
+    ss << "=== ADVANCED PASSED PAWNS MODULES ===\n\n";
 
     // 1. ENGINE NUMERICAL SCORES
     ScoreForClassical w_pass = Trace::scores[Trace::PASSED][WHITE];
@@ -32,16 +120,13 @@ std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, i
        << "  Black : " << std::setw(4) << mg_value(b_pass) << " (MG) / " << std::setw(4) << eg_value(b_pass) << " (EG)\n"
        << "  Net   : " << std::setw(4) << mg_net << " (MG) / " << std::setw(4) << eg_net << " (EG)\n\n";
 
-    // 2. DYNAMIC DETECTION
-    Bitboard white_passed = pawnEntry->passed_pawns(WHITE);
-    Bitboard black_passed = pawnEntry->passed_pawns(BLACK);
-
+    // 2. DYNAMIC DETECTION & ADVANCED CLASSIFICATION
     bool lethal_passer_exists = false;
     bool w_passer_blocked = false, b_passer_blocked = false;
     bool w_passer_free = false, b_passer_free = false;
     bool w_passer_supported = false, b_passer_supported = false;
 
-    auto analyze_passers = [&](Color color, Bitboard passed) {
+    auto analyze_passers_adv = [&](Color color, Bitboard passed) {
         if (!passed) {
             ss << "  - None detected.\n";
             return;
@@ -58,7 +143,6 @@ std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, i
 
             int steps = (color == WHITE) ? (RANK_8 - rank) : (rank - RANK_1);
             
-            // CORRECTED SUPPORT LOGIC (Template fixed)
             Bitboard sq_bb = square_bb(sq);
             Bitboard protectors = (color == WHITE) 
                 ? (pos.pieces(WHITE, PAWN) & pawn_attacks_bb<BLACK>(sq_bb))
@@ -68,7 +152,6 @@ std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, i
             if (supported && color == WHITE) w_passer_supported = true;
             if (supported && color == BLACK) b_passer_supported = true;
 
-            // Blockade check
             Square square_ahead = sq + push;
             bool blocked = pos.piece_on(square_ahead) != NO_PIECE;
             if (blocked && color == WHITE) w_passer_blocked = true;
@@ -76,7 +159,6 @@ std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, i
             if (blocked && color == BLACK) b_passer_blocked = true;
             else if (!blocked && color == BLACK) b_passer_free = true;
 
-            // Danger Level classification
             std::string strength;
             if ((color == WHITE && rank >= RANK_6) || (color == BLACK && rank <= RANK_3)) {
                 strength = "LETHAL (Highly advanced)";
@@ -94,11 +176,11 @@ std::string analyze_passed_pawns(const Position& pos, Pawns::Entry* pawnEntry, i
         }
     };
 
-    ss << "White's Passed Pawns:\n";
-    analyze_passers(WHITE, white_passed);
+    ss << "White's Passed Pawns Analysis:\n";
+    analyze_passers_adv(WHITE, white_passed);
     
-    ss << "\nBlack's Passed Pawns:\n";
-    analyze_passers(BLACK, black_passed);
+    ss << "\nBlack's Passed Pawns Analysis:\n";
+    analyze_passers_adv(BLACK, black_passed);
 
     // 3. ENDGAME SCALING ABLATION
     ss << "\nStrategic Ablation (Endgame Scaling):\n";

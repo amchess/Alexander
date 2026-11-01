@@ -7,15 +7,29 @@
 #include "winnable.h"
 
 namespace Alexander {
-namespace Eval {
 
 using namespace Trace;
 
+namespace Eval {
+
 std::string analyze_winnable(const Position& pos, int phase) {
-    (void)pos; (void)phase; // Silence compiler warnings for unused variables
     std::stringstream ss;
-    // We intentionally return an empty string here to mute the redundant "Winnable" header.
-    // Win Probability is already handled in the General Information block.
+    
+    // =========================================================================
+    // BLOCCO 1: OUTPUT ORIGINALE INTATTO AL 100% (Legacy Parser Support)
+    // =========================================================================
+    Trace::Helpers::append_term_row(ss, pos, phase, "Winnable", WINNABLE);
+    ss << "\n";
+
+    // =========================================================================
+    // BLOCCO 2: OUTPUT AGGIORNATO (ADVANCED WINNABLE MODULE / MUTED LOGIC)
+    // =========================================================================
+    // Note: The redundant "Winnable" header can be effectively muted or handled 
+    // here since Win Probability is already fully processed in General Information.
+    // (Uncomment the line below if you wish to strictly enforce the silent behavior).
+    // (void)pos; (void)phase;
+    // ss.str(""); // Clear legacy row if strict muting is desired
+
     return ss.str();
 }
 

@@ -27,7 +27,7 @@
 namespace Alexander {
 
 namespace Trace {
-// for improved trace begin
+
 // Funzione per determinare la zona di Shashin basata sulla win probability
 std::string get_shashin_zone(uint8_t winProb, Color sideToMove) {
     if (sideToMove == WHITE)
@@ -131,6 +131,7 @@ std::string get_game_phase(const Position& pos) {
 
     return faseDesc;
 }
+
 // Funzione per ottenere il nome del pezzo
 std::string piece_type_name(PieceType pt) {
     switch (pt)
@@ -149,8 +150,8 @@ std::string piece_type_name(PieceType pt) {
         return "Unknown";
     }
 }
-namespace {
 
+namespace {
 // Costanti dalla valutazione dei pedoni
 constexpr ScoreForClassical Backward           = make_score(6, 19);
 constexpr ScoreForClassical Doubled            = make_score(11, 51);
@@ -161,7 +162,7 @@ constexpr ScoreForClassical WeakUnopposed      = make_score(15, 18);
 constexpr ScoreForClassical BlockedPawn[2]     = {make_score(-19, -8), make_score(-7, 3)};
 constexpr int               Connected[RANK_NB] = {0, 3, 7, 7, 15, 54, 86};
 }
-// for improved trace begin
+
 // Funzione helper per determinare l'area di un square
 Area area_of(Square s) {
     File f = file_of(s);
@@ -183,7 +184,9 @@ void add(int idx, ScoreForClassical w, ScoreForClassical b) {
     scores[idx][WHITE] = w;
     scores[idx][BLACK] = b;
 }
-}
+
+} // namespace Trace
+
 using namespace Trace;
 
 namespace Eval {
@@ -226,12 +229,13 @@ std::string trace_analysis(Position&          pos,
         ss << analyze_winnable(pos, phase);
     }
 
-    // 4. ANALISI FINALI
-    ss << generate_makogonov_ranking(pos, pawnEntry);
+    // 4. ANALISI FINALI (Aggiornato con gamePhase per Makogonov Avanzato)
+    ss << generate_makogonov_ranking(pos, pawnEntry, gamePhase);
     ss << generate_legal_moves_analysis(pos);
 
     return ss.str();
 }
-}
 
-}  // namespace Alexander
+} // namespace Eval
+
+} // namespace Alexander

@@ -6,16 +6,30 @@
 #include "../../bitboard.h"
 #include <sstream>
 #include <iomanip>
+#include "king_safety_and_threats.h"
 
 namespace Alexander {
-namespace Eval {
 
 using namespace Trace;
 
+namespace Eval {
+
 std::string analyze_king_safety_and_threats(const Position& pos, int phase) {
-    (void)phase; (void)pos; // Silence unused parameter warnings
     std::stringstream ss;
-    ss << "=== KING SAFETY & THREATS SUBELEMENTS ===\n";
+    
+    // =========================================================================
+    // BLOCCO 1: OUTPUT ORIGINALE INTATTO AL 100%
+    // =========================================================================
+    Trace::Helpers::append_term_row(ss, pos, phase, "\n\nKing safety", KING);
+    ss << "\n";
+    Trace::Helpers::append_term_row(ss, pos, phase, "Threats", THREAT);
+    ss << "\n";
+
+    // =========================================================================
+    // BLOCCO 2: OUTPUT AGGIORNATO (ADVANCED MODULES)
+    // =========================================================================
+    ss << "================================================================\n";
+    ss << "=== KING SAFETY & THREATS SUBELEMENTS ===\n\n";
 
     // 1. ENGINE NUMERICAL SCORES
     // Note: KING and THREAT belong to the global Alexander namespace, not Trace::

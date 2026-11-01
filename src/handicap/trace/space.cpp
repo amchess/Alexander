@@ -1,167 +1,241 @@
 #include "../../evaluate.h"
 #include "trace.h"
+#include "general.h"
+#include "imbalances.h"
+#include "material_element.h"
+#include "pawns_element.h"
+#include "passed_pawns.h"
+#include "knights.h"
+#include "bishops.h"
+#include "major_pieces.h"
+#include "king_safety_and_threats.h"
+#include "mobility.h"
+#include "space.h"
+#include "winnable.h"
+#include "makogonov.h"
+#include "legal_moves.h"
 #include "../evaluate_handicap.h"
+#include "../../pawns.h"
 #include "../../uci.h"
 #include "../../movegen.h"
 #include "../../bitboard.h"
 #include <sstream>
 #include <iomanip>
-#include "space.h"
+#include <algorithm>
+#include <vector>
 
 namespace Alexander {
-namespace Eval {
+
+namespace Trace {
+
+// Funzione per determinare la zona di Shashin basata sulla win probability
+std::string get_shashin_zone(uint8_t winProb, Color sideToMove) {
+    if (sideToMove == WHITE)
+    {
+        if (winProb <= 5)
+            return "High Petrosian (Losing position)";
+        else if (winProb <= 10)
+            return "High-Middle Petrosian (Decisive disadvantage)";
+        else if (winProb <= 15)
+            return "Middle Petrosian (Clear disadvantage)";
+        else if (winProb <= 20)
+            return "Middle-Low Petrosian (Significant disadvantage)";
+        else if (winProb <= 24)
+            return "Low Petrosian (Slight disadvantage)";
+        else if (winProb <= 49)
+            return "Chaos: Capablanca-Petrosian (Balanced with opponent pressure)";
+        else if (winProb == 50)
+            return "Capablanca (Equal position)";
+        else if (winProb <= 75)
+            return "Chaos: Capablanca-Tal (Initiative)";
+        else if (winProb <= 79)
+            return "Low Tal (Slight advantage)";
+        else if (winProb <= 84)
+            return "Middle-Low Tal (Growing advantage)";
+        else if (winProb <= 89)
+            return "Middle Tal (Clear advantage)";
+        else if (winProb <= 94)
+            return "High-Middle Tal (Dominant position)";
+        else
+            return "High Tal (Winning position)";
+    }
+    else
+    {
+        uint8_t blackWinProb = 100 - winProb;
+        if (blackWinProb <= 5)
+            return "High Petrosian (Losing position)";
+        else if (blackWinProb <= 10)
+            return "High-Middle Petrosian (Decisive disadvantage)";
+        else if (blackWinProb <= 15)
+            return "Middle Petrosian (Clear disadvantage)";
+        else if (blackWinProb <= 20)
+            return "Middle-Low Petrosian (Significant disadvantage)";
+        else if (blackWinProb <= 24)
+            return "Low Petrosian (Slight disadvantage)";
+        else if (blackWinProb <= 49)
+            return "Chaos: Capablanca-Petrosian (Balanced with opponent pressure)";
+        else if (blackWinProb == 50)
+            return "Capablanca (Equal position)";
+        else if (blackWinProb <= 75)
+            return "Chaos: Capablanca-Tal (Initiative)";
+        else if (blackWinProb <= 79)
+            return "Low Tal (Slight advantage)";
+        else if (blackWinProb <= 84)
+            return "Middle-Low Tal (Growing advantage)";
+        else if (blackWinProb <= 89)
+            return "Middle Tal (Clear advantage)";
+        else if (blackWinProb <= 94)
+            return "High-Middle Tal (Dominant position)";
+        else
+            return "High Tal (Winning position)";
+    }
+}
+
+// Funzione per calcolare la fase del gioco
+std::string get_game_phase(const Position& pos) {
+    constexpr float kingMatFase   = 3.0f;
+    constexpr float queenMatFase  = 9.9f;
+    constexpr float rookMatFase   = 5.5f;
+    constexpr float bishopMatFase = 3.5f;
+    constexpr float knightMatFase = 3.1f;
+    constexpr float pawnMatFase   = 1.0f;
+
+    int numTotUnit = pos.count<ALL_PIECES>();
+
+    float totMatFase = kingMatFase * (pos.count<KING>(WHITE) + pos.count<KING>(BLACK))
+                     + queenMatFase * (pos.count<QUEEN>(WHITE) + pos.count<QUEEN>(BLACK))
+                     + rookMatFase * (pos.count<ROOK>(WHITE) + pos.count<ROOK>(BLACK))
+                     + bishopMatFase * (pos.count<BISHOP>(WHITE) + pos.count<BISHOP>(BLACK))
+                     + knightMatFase * (pos.count<KNIGHT>(WHITE) + pos.count<KNIGHT>(BLACK))
+                     + pawnMatFase * (pos.count<PAWN>(WHITE) + pos.count<PAWN>(BLACK));
+
+    int numSemiMoveInt = pos.game_ply();
+
+    float faseNum = -1.0f;
+    if (numSemiMoveInt != 0)
+    {
+        faseNum = (numTotUnit * totMatFase) / (3.0f * (numSemiMoveInt + 0.001f));
+    }
+
+    std::string faseDesc;
+    if ((faseNum >= 0) && (faseNum < 5))
+        faseDesc = "Endgame";
+    else if ((faseNum >= 5) && (faseNum < 10))
+        faseDesc = "Transition to endgame";
+    else if ((faseNum >= 10) && (faseNum < 40))
+        faseDesc = "Middlegame";
+    else if ((faseNum >= 40) && (faseNum < 50))
+        faseDesc = "Transition to middlegame";
+    else if ((faseNum >= 50) || faseNum == -1)
+        faseDesc = "Opening";
+
+    return faseDesc;
+}
+
+// Funzione per ottenere il nome del pezzo
+std::string piece_type_name(PieceType pt) {
+    switch (pt)
+    {
+    case PAWN :
+        return "Pawn";
+    case KNIGHT :
+        return "Knight";
+    case BISHOP :
+        return "Bishop";
+    case ROOK :
+        return "Rook";
+    case QUEEN :
+        return "Queen";
+    default :
+        return "Unknown";
+    }
+}
+
+namespace {
+// Costanti dalla valutazione dei pedoni
+constexpr ScoreForClassical Backward           = make_score(6, 19);
+constexpr ScoreForClassical Doubled            = make_score(11, 51);
+constexpr ScoreForClassical DoubledEarly       = make_score(17, 7);
+constexpr ScoreForClassical Isolated           = make_score(1, 20);
+constexpr ScoreForClassical WeakLever          = make_score(2, 57);
+constexpr ScoreForClassical WeakUnopposed      = make_score(15, 18);
+constexpr ScoreForClassical BlockedPawn[2]     = {make_score(-19, -8), make_score(-7, 3)};
+constexpr int               Connected[RANK_NB] = {0, 3, 7, 7, 15, 54, 86};
+}
+
+// Funzione helper per determinare l'area di un square
+Area area_of(Square s) {
+    File f = file_of(s);
+    if (f <= FILE_C)
+        return QUEEN_SIDE;
+    if (f <= FILE_E)
+        return CENTER;
+    return KING_SIDE;
+}
+
+// Array per i conteggi di mobilità dettagliati [COLOR][AREA]
+int mobility_area_counts[COLOR_NB][AREA_NB] = {0};
+
+ScoreForClassical scores[TERM_NB][COLOR_NB];
+
+void add(int idx, Color c, ScoreForClassical s) { scores[idx][c] = s; }
+
+void add(int idx, ScoreForClassical w, ScoreForClassical b) {
+    scores[idx][WHITE] = w;
+    scores[idx][BLACK] = b;
+}
+
+} // namespace Trace
 
 using namespace Trace;
 
-std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
-    (void)phase; // Silence warning
+namespace Eval {
+
+std::string trace_analysis(Position&          pos,
+                           Value              v_white,
+                           uint8_t            winProb,
+                           const std::string& shashinZone,
+                           const std::string& gamePhase,
+                           int                phase) {
     std::stringstream ss;
-    ss << "=== SPACE SUBELEMENTS ===\n";
+    Pawns::Entry*     pawnEntry = Pawns::probe(pos);
 
-    // 1. ENGINE NUMERICAL SCORES
-    ScoreForClassical w_sp = Trace::scores[SPACE][WHITE];
-    ScoreForClassical b_sp = Trace::scores[SPACE][BLACK];
-    ScoreForClassical net_sp = w_sp - b_sp;
-    int mg_net = mg_value(net_sp);
+    ss << generate_general_info(pos, v_white, winProb, shashinZone, gamePhase);
 
-    ss << "Territorial Control Evaluation (Pawn advancement & Central footprint):\n"
-       << "  White : " << std::setw(4) << mg_value(w_sp) << " (MG) / " << std::setw(4) << eg_value(w_sp) << " (EG)\n"
-       << "  Black : " << std::setw(4) << mg_value(b_sp) << " (MG) / " << std::setw(4) << eg_value(b_sp) << " (EG)\n"
-       << "  Net   : " << std::setw(4) << mg_net << " (MG) / " << std::setw(4) << eg_value(net_sp) << " (EG)\n\n";
+    ss << generate_main_table();
 
-    // 2. OTB DIAGNOSTIC VERDICT (The Cramp)
-    ss << "Territorial Diagnostic:\n";
-    if (mg_net > 20) {
-        ss << "  - White holds a clear space advantage (+" << mg_net << "). Black is cramped. White should AVOID piece trades to keep Black suffocated. Black must force trades to free up their position.\n\n";
-    } else if (mg_net < -20) {
-        ss << "  - Black holds a clear space advantage (" << std::abs(mg_net) << "). White is cramped. Black should AVOID piece trades to keep White suffocated. White must force trades to free up their position.\n\n";
-    } else {
-        ss << "  - Space and territorial control are roughly equal. Neither side is critically cramped.\n\n";
+    ss << analyze_material(pos, phase);
+
+    if (Alexander::Eval::handicapConfig.imbalancesToEvaluate)
+    {
+        ss << analyze_imbalances(pos, phase);
     }
 
-    // 3. DETTAGLIO SPAZIO PER AREE
-    ss << "Space Detail by Area:\n";
-    const Bitboard QueenSideFiles = FileABB | FileBBB | FileCBB;
-    const Bitboard CenterFiles    = FileDBB | FileEBB;
-    const Bitboard KingSideFiles  = FileFBB | FileGBB | FileHBB;
-
-    auto pawn_attacks_bb = [](Color c, Bitboard pawns) {
-        return c == WHITE ? (shift<NORTH_WEST>(pawns) | shift<NORTH_EAST>(pawns))
-                          : (shift<SOUTH_WEST>(pawns) | shift<SOUTH_EAST>(pawns));
-    };
-
-    auto calculate_space_for_area = [&](Color us, Bitboard area_mask) {
-        Color them = ~us;
-        Bitboard rank_mask = (us == WHITE) ? (Rank2BB | Rank3BB | Rank4BB) : (Rank5BB | Rank6BB | Rank7BB);
-        Bitboard space_mask = area_mask & rank_mask;
-
-        Bitboard their_pawns = pos.pieces(them, PAWN);
-        Bitboard their_pawn_attacks = pawn_attacks_bb(them, their_pawns);
-
-        Bitboard safe = space_mask & ~pos.pieces(us, PAWN) & ~their_pawn_attacks;
-
-        Bitboard behind = pos.pieces(us, PAWN);
-        if (us == WHITE) {
-            behind |= shift<SOUTH>(behind);
-            behind |= shift<SOUTH>(shift<SOUTH>(behind));
-        } else {
-            behind |= shift<NORTH>(behind);
-            behind |= shift<NORTH>(shift<NORTH>(behind));
-        }
-        int bonus = popcount(safe) + popcount(behind & safe & ~their_pawn_attacks);
-        return bonus;
-    };
-
-    int white_queen_side = calculate_space_for_area(WHITE, QueenSideFiles);
-    int white_center     = calculate_space_for_area(WHITE, CenterFiles);
-    int white_king_side  = calculate_space_for_area(WHITE, KingSideFiles);
-    int black_queen_side = calculate_space_for_area(BLACK, QueenSideFiles);
-    int black_center     = calculate_space_for_area(BLACK, CenterFiles);
-    int black_king_side  = calculate_space_for_area(BLACK, KingSideFiles);
-
-    int queen_side_diff = white_queen_side - black_queen_side;
-    int center_diff     = white_center - black_center;
-    int king_side_diff  = white_king_side - black_king_side;
-
-    ss << "                           Queen side   Center   King side\n";
-    ss << "White                      " << std::setw(3) << white_queen_side << "         " << std::setw(3) << white_center << "        " << std::setw(3) << white_king_side << "\n";
-    ss << "Black                      " << std::setw(3) << black_queen_side << "         " << std::setw(3) << black_center << "        " << std::setw(3) << black_king_side << "\n";
-    ss << "Difference White-Black     " << std::setw(3) << queen_side_diff << "         " << std::setw(3) << center_diff << "        " << std::setw(3) << king_side_diff << "\n";
-
-    int white_total_space = white_queen_side + white_center + white_king_side;
-    int black_total_space = black_queen_side + black_center + black_king_side;
-    ss << "Total Space: White " << white_total_space << " - Black " << black_total_space << "\n\n";
-
-    // 4. EXPANSION FACTOR (Shashin Theory)
-    ss << "Expansion Factor (Shashin Theory):\n";
-    auto calculate_center_of_gravity = [&](Color color) -> double {
-        Bitboard pieces = pos.pieces(color);
-        double sum = 0.0;
-        int piece_count = 0;
-        while (pieces) {
-            Square s = pop_lsb(pieces);
-            Rank rank = rank_of(s);
-            double rank_value = (color == WHITE) ? (rank + 1) : (8 - rank);
-            sum += rank_value;
-            piece_count++;
-        }
-        return piece_count > 0 ? sum / piece_count : 0.0;
-    };
-
-    double white_gravity = calculate_center_of_gravity(WHITE);
-    double black_gravity = calculate_center_of_gravity(BLACK);
-    double delta_expansion = white_gravity - black_gravity;
-
-    ss << "  - White Center of Gravity: " << std::fixed << std::setprecision(2) << white_gravity << "\n";
-    ss << "  - Black Center of Gravity: " << std::fixed << std::setprecision(2) << black_gravity << "\n";
-    ss << "  - Delta (White-Black):     " << std::fixed << std::setprecision(2) << delta_expansion << "\n\n";
-
-    if (winProb >= 45 && winProb <= 55) {
-        ss << "Capablanca Expansion Recommendations:\n";
-        ss << "  Both players should:\n";
-        ss << "  1. Increase their own expansion factor\n";
-        ss << "  2. Decrease opponent's expansion factor\n\n";
-
-        if (delta_expansion > 0.5) {
-            ss << "  - White has expansion advantage - convert to lasting positional pressure.\n";
-            ss << "  - Black should challenge White's advanced pieces and seek exchanges.\n";
-        } else if (delta_expansion < -0.5) {
-            ss << "  - Black has expansion advantage - convert to lasting positional pressure.\n";
-            ss << "  - White should challenge Black's advanced pieces and seek exchanges.\n";
-        } else {
-            ss << "  - Expansion is balanced - focus on gradual improvement and piece activity.\n";
-        }
-    }
-    
-    // 5. DYNAMIC OTB STRATEGIC SYNTHESIS
-    ss << "\n--- OTB STRATEGIC SYNTHESIS ---\n";
-    
-    // Theory Branch
-    if (mg_net > 20 || mg_net < -20) {
-        ss << "  * Theory : A spatial advantage acts as a positional boa constrictor. It grants your pieces immense maneuvering flexibility while forcing the opponent's pieces to step on each other's toes.\n";
-    } else if (delta_expansion > 0.5 || delta_expansion < -0.5) {
-        ss << "  * Theory : Shashin's Center of Gravity dictates the 'weight' of an attack. A high expansion factor means pieces are physically closer to the enemy King, reducing the time required to create mating nets.\n";
-    } else {
-        ss << "  * Theory : When space is equal, the game is decided by pawn structure integrity, piece synergy, and the creation of favorable imbalances.\n";
+    if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
+    {
+        ss << analyze_pawns(pos, phase);
+        ss << analyze_passed_pawns(pos, pawnEntry, phase);
     }
 
-    // Action Branch
-    ss << "  * Action : ";
-    if (mg_net > 20) {
-        ss << "White possesses a significant space advantage. DO NOT TRADE PIECES. Maintain the tension and slowly suffocate Black. Black must aggressively seek piece exchanges to relieve the cramp.\n";
-    } else if (mg_net < -20) {
-        ss << "Black possesses a significant space advantage. DO NOT TRADE PIECES. Maintain the tension and slowly suffocate White. White must aggressively seek piece exchanges to relieve the cramp.\n";
-    } else if (white_total_space == black_total_space && white_center > black_center) {
-        ss << "Total space is balanced, but White controls the center. White should prepare a central break to split the board. Black must blockade the center and seek counterplay on the flanks.\n";
-    } else if (white_total_space == black_total_space && black_center > white_center) {
-        ss << "Total space is balanced, but Black controls the center. Black should prepare a central break to split the board. White must blockade the center and seek counterplay on the flanks.\n";
-    } else {
-        ss << "Territory is balanced. Use prophylactic moves to prevent your opponent from expanding on the flanks, and maneuver your pieces to their optimal squares (see Makogonov ranking) before forcing the issue.\n";
+    ss << analyze_knights(pos, phase, shashinZone);
+    ss << analyze_bishops(pos, phase, gamePhase, v_white);
+    ss << analyze_rooks_and_queens(pos, phase);
+    ss << analyze_king_safety_and_threats(pos, phase);
+    ss << analyze_mobility(pos, phase);
+    ss << analyze_space(pos, phase, winProb);
+
+    if (Alexander::Eval::handicapConfig.winnableToEvaluate)
+    {
+        ss << analyze_winnable(pos, phase);
     }
 
-    ss << "\n";
+    // 4. ANALISI FINALI (Aggiornato con gamePhase per Makogonov Avanzato)
+    ss << generate_makogonov_ranking(pos, pawnEntry, gamePhase);
+    ss << generate_legal_moves_analysis(pos);
+
     return ss.str();
 }
 
 } // namespace Eval
+
 } // namespace Alexander
