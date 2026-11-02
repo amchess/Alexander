@@ -20,10 +20,13 @@
 #include <vector>
 #include <bitset>
 
+#include "attacks.h"
 #include "bitboard.h"
 #include "types.h"
 
 namespace Alexander {
+
+using namespace Attacks;  // Stockfish 19 moved the attack tables to Alexander::Attacks
 
 namespace {
 

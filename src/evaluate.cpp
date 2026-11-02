@@ -35,6 +35,8 @@
 #include "handicap/trace/trace.h"
 #include "wdl/win_probability.h"
 namespace Alexander {
+
+using namespace Attacks;  // Stockfish 19 moved the attack tables to Alexander::Attacks
 using namespace Trace;
 namespace {
 
@@ -393,8 +395,8 @@ template<Color Us>
 ScoreForClassical Evaluation<T>::king() const {
 
     constexpr Color    Them = ~Us;
-    constexpr Bitboard Camp = (Us == WHITE ? AllSquares ^ Rank6BB ^ Rank7BB ^ Rank8BB
-                                           : AllSquares ^ Rank1BB ^ Rank2BB ^ Rank3BB);
+    constexpr Bitboard Camp = (Us == WHITE ? AllSquaresBB ^ Rank6BB ^ Rank7BB ^ Rank8BB
+                                           : AllSquaresBB ^ Rank1BB ^ Rank2BB ^ Rank3BB);
 
     Bitboard     weak, b1, b2, b3, safe, unsafeChecks = 0;
     Bitboard     rookChecks, queenChecks, bishopChecks, knightChecks;

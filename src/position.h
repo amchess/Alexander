@@ -25,17 +25,20 @@
 #include <iosfwd>
 #include <memory>
 #include <new>
+#include <optional>
+#include <stdexcept>
 #include <string>
 
+#include "attacks.h"
 #include "bitboard.h"
 #include "types.h"
 #include "psqt.h"     //for classical
 #include "movegen.h"  //shashin
 
 namespace Alexander {
-//learning begin
+// [SC:learning] begin
 extern void setStartPoint();
-//learning end
+// [SC:learning] end
 struct SharedHistories;
 class TranspositionTable;
 
@@ -74,6 +77,11 @@ struct StateInfo {
 // elements are not invalidated upon list resizing.
 using StateListPtr = std::unique_ptr<std::deque<StateInfo>>;
 
+// This error should be used whenever a position is suspected to be unsupported
+// by the engine. In particular positions that may cause hard errors like segmentation fault.
+struct PositionSetError: std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 // Position class stores information regarding the board representation as
 // pieces, side to move, hash keys, castling info, etc. Important methods are
@@ -89,10 +97,10 @@ class Position {
     Position& operator=(const Position&) = delete;
 
     // FEN string input/output
-    Position&
+    std::optional<PositionSetError>
     set(const std::string& fenStr, bool isChess960, StateInfo* si, Thread* th);  //for classical
-    Position&   set(const std::string& code, Color c, StateInfo* si);
-    std::string fen() const;
+    std::optional<PositionSetError> set(const std::string& code, Color c, StateInfo* si);
+    std::string                     fen() const;
 
     // Position representation
     Bitboard pieces() const;  // All pieces
@@ -128,13 +136,15 @@ class Position {
     // Attacks to/from a given square
     Bitboard attackers_to(Square s) const;
     Bitboard attackers_to(Square s, Bitboard occupied) const;
+    // [SC] Un Color verrebbe convertito implicitamente in Bitboard (occupancy 0 o 1):
+    // per gli attaccanti di un colore usare attackers_to(s) & pieces(c).
+    Bitboard attackers_to(Square s, Color c) const = delete;
     bool     attackers_to_exist(Square s, Bitboard occupied, Color c) const;
     void     update_slider_blockers(Color c) const;
     Bitboard slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const;  //for classical
     template<PieceType Pt>
     Bitboard attacks_by(Color c) const;
 
-    // Properties of moves
     bool  legal(Move m) const;
     bool  pseudo_legal(const Move m) const;
     bool  capture(Move m) const;
@@ -156,7 +166,7 @@ class Position {
                  const TranspositionTable* tt,
                  const SharedHistories*    worker);  //for classical
     void undo_move(Move m);
-    void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
+    void do_null_move(StateInfo& newSt);
     void undo_null_move();
 
     // Static Exchange Evaluation
@@ -164,6 +174,7 @@ class Position {
 
     // Accessing hash keys
     Key key() const;
+    Key prefetch_key(Move m) const;
     Key material_key() const;
     Key pawn_key() const;
     Key minor_piece_key() const;
@@ -184,11 +195,12 @@ class Position {
     int   rule50_count() const;
     Value non_pawn_material(Color c) const;
     Value non_pawn_material() const;
+    bool  dtz_is_dtm() const;  // Pawnless && (3-men || 4-men-minors-only)
 
     // Position consistency check, for debugging
-    bool pos_is_ok() const;
-    bool material_key_is_ok() const;
-    void flip();
+    bool                            pos_is_ok() const;
+    bool                            material_key_is_ok() const;
+    std::optional<PositionSetError> flip();
 
     StateInfo* state() const;
 
@@ -204,14 +216,10 @@ class Position {
     void set_check_info() const;
 
     // Other helpers
-    template<bool PutPiece, bool ComputeRay = true>
-    void update_piece_threats(Piece    pc,
-                              Square   s,
-                              Bitboard noRaysContaining = -1ULL) const;  //for classical
-    void move_piece(Square from, Square to);                             //for classical
+    void move_piece(Square from, Square to);  //for classical
     template<bool Do>
-    void
-        do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);  //for classical
+    void do_castling(Color us, Square from, Square& to, Square& rfrom, Square& rto);  //for classical
+    template<bool AfterMove = false>
     Key adjust_key50(Key k) const;
 
     // Data members
@@ -313,7 +321,7 @@ inline Bitboard Position::attacks_by(Color c) const {
         Bitboard threats   = 0;
         Bitboard attackers = pieces(c, Pt);
         while (attackers)
-            threats |= attacks_bb<Pt>(pop_lsb(attackers), pieces());
+            threats |= Attacks::attacks_bb<Pt>(pop_lsb(attackers), pieces());
         return threats;
     }
 }
@@ -335,8 +343,10 @@ inline int Position::pawns_on_same_color_squares(Color c, Square s) const {
 }
 //for classical end
 inline Key Position::key() const { return adjust_key50(st->key); }
+
+template<bool AfterMove>
 inline Key Position::adjust_key50(Key k) const {
-    return st->rule50 < 14 ? k : k ^ make_key((st->rule50 - 14) / 8);
+    return st->rule50 < 14 - AfterMove ? k : k ^ make_key((st->rule50 - (14 - AfterMove)) / 8);
 }
 
 inline Key Position::pawn_key() const { return st->pawnKey; }
@@ -366,9 +376,20 @@ inline bool Position::opposite_bishops() const {
 //for classical end
 inline bool Position::is_chess960() const { return chess960; }
 
+inline bool Position::dtz_is_dtm() const {
+    return !count<PAWN>()
+        && (count<ALL_PIECES>() == 3 || (count<ALL_PIECES>() == 4 && !pieces(QUEEN, ROOK)));
+}
+
 inline bool Position::capture(Move m) const {
     assert(m.is_ok());
-    return (!empty(m.to_sq()) && m.type_of() != CASTLING) || m.type_of() == EN_PASSANT;
+
+    const MoveType mt = m.type_of();
+
+    if (mt == NORMAL || mt == PROMOTION)
+        return !empty(m.to_sq());
+
+    return mt == EN_PASSANT;
 }
 
 // Returns true if a move is generated from the capture stage, having also
@@ -376,7 +397,16 @@ inline bool Position::capture(Move m) const {
 // generation is needed to avoid the generation of duplicate moves.
 inline bool Position::capture_stage(Move m) const {
     assert(m.is_ok());
-    return capture(m) || m.promotion_type() == QUEEN;
+
+    const MoveType mt = m.type_of();
+
+    if (mt == NORMAL)
+        return !empty(m.to_sq());
+
+    if (mt == PROMOTION)
+        return !empty(m.to_sq()) || m.promotion_type() == QUEEN;
+
+    return mt == EN_PASSANT;
 }
 
 inline Piece Position::captured_piece() const { return st->capturedPiece; }
@@ -418,10 +448,7 @@ inline void Position::move_piece(Square from, Square to) {
 }
 
 inline void Position::swap_piece(Square s, Piece pc) {  //for classical
-                                                        //no classical
-
     remove_piece(s);
-
     put_piece(pc, s);
 }
 

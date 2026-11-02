@@ -17,43 +17,65 @@
 */
 
 #include <iostream>
+#include <memory>
+#include <utility>
+
+#include "attacks.h"
+#include "bitboard.h"
 //for classical begin
-#include <unordered_map>
 #include "evaluate.h"
 #include "endgame.h"
 #include "psqt.h"
 //for classical end
-#include "bitboard.h"
 #include "misc.h"
 #include "position.h"
 #include "tune.h"
-//wdl model
+// wdl model
 #include "uci.h"
 #include "wdl/win_probability.h"
-#include "learn/learn.h"  //learning
+#include "learn/learn.h"  // learning
+
 using namespace Alexander;
+
+#ifdef UNIVERSAL_BINARY
+namespace Alexander {
+
+int main(int argc, char* argv[]);  // silence 'no previous declaration'
+
+__attribute__((used))  // keep main alive
+#endif
 
 int main(int argc, char* argv[]) {
 
     std::cout << engine_info() << std::endl;
 
-    WDLModel::init();  //wdl model
+    WDLModel::init();  // wdl model
 
-    Bitboards::init();
+    Attacks::init();
     Position::init();
 
-    auto uci = std::make_unique<UCIEngine>(argc, argv);
-    LD.init(uci->engine_options());  //learning
+    auto cli = CommandLine(argc, argv);
+    auto uci = std::make_unique<UCIEngine>(std::move(cli));
+    LD.init(uci->engine_options());  // learning
+
     Tune::init(uci->engine_options());
     //for classical begin
     Eval::initHandicapMode(uci->engine_options());
-    Bitbases::init();
     Eval::loadAvatar(uci->engine_options()["Avatar File"]);  //handicap mode
     PSQT::init();
     Bitbases::init();
     Endgames::init();
     //for classical end
+
     uci->loop();
 
     return 0;
 }
+
+#ifdef UNIVERSAL_BINARY
+}  // namespace Alexander
+
+    #ifdef UNIVERSAL_NEEDS_MAIN_SHIM
+int main(int argc, char* argv[]) { return Alexander::main(argc, argv); }
+    #endif
+#endif

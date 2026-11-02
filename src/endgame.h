@@ -19,6 +19,7 @@
 #ifndef ENDGAME_H_INCLUDED
 #define ENDGAME_H_INCLUDED
 
+#include <cassert>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -115,8 +116,16 @@ template<EndgameCode E, typename T = eg_type<E>>
 void add(const std::string& code) {
 
     StateInfo st;
-    map<T>()[Position().set(code, WHITE, &st).material_key()] = Ptr<T>(new Endgame<E>(WHITE));
-    map<T>()[Position().set(code, BLACK, &st).material_key()] = Ptr<T>(new Endgame<E>(BLACK));
+    Position  pos;
+
+    // Position::set() returns an error since Stockfish 19: the endgame codes are valid
+    [[maybe_unused]] auto err = pos.set(code, WHITE, &st);
+    assert(!err);
+    map<T>()[pos.material_key()] = Ptr<T>(new Endgame<E>(WHITE));
+
+    err = pos.set(code, BLACK, &st);
+    assert(!err);
+    map<T>()[pos.material_key()] = Ptr<T>(new Endgame<E>(BLACK));
 }
 
 template<typename T>

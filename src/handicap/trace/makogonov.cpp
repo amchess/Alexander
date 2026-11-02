@@ -12,6 +12,8 @@
 
 namespace Alexander {
 
+using namespace Attacks;  // Stockfish 19 moved the attack tables to Alexander::Attacks
+
 using namespace Trace;
 
 namespace Eval {

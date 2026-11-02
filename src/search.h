@@ -23,14 +23,13 @@
 #include <array>
 #include <atomic>
 #include <cassert>
-#include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <cstring>
 
 #include "history.h"
 #include "misc.h"
@@ -41,17 +40,18 @@
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
 #include "types.h"
-//from Shashin begin
+
+// [SC:shashin] begin
 #include "shashin/shashin_position.h"
 #include "evaluate.h"
 #include "book/book_manager.h"
-#include <memory>
 #include "shashin/shashin_manager.h"
-//from Shashin end
+// [SC:shashin] end
 
 namespace Alexander {
 
-class ShashinManager;  //shashin
+class ShashinManager;
+
 // Different node types, used as a template parameter
 enum NodeType {
     NonPV,
@@ -65,11 +65,61 @@ class OptionsMap;
 
 namespace Search {
 
+// syzygy_extend_pv() may lead to PVs longer than MAX_PLY
+struct RootPVMoves: public std::vector<Move> {
+    RootPVMoves() { reserve(MAX_PLY); }
+};
+
+struct PVMoves {
+    Move  moves[MAX_PLY + 1];
+    usize length = 0;
+
+    Move*       begin() { return moves; }
+    const Move* begin() const { return moves; }
+    Move*       end() { return moves + length; }
+    const Move* end() const { return moves + length; }
+
+    Move&       operator[](usize index) { return moves[index]; }
+    const Move& operator[](usize index) const { return moves[index]; }
+
+    bool  empty() const { return length == 0; }
+    usize size() const { return length; }
+
+    void clear() { length = 0; }
+
+    void push_back(Move move) {
+        assert(length < MAX_PLY + 1);
+        moves[length++] = move;
+    }
+
+    void resize(usize newSize) {
+        assert(newSize <= length);
+        length = newSize;
+    }
+
+    void update(Move move, const PVMoves* childPv) {
+        assert(childPv == nullptr || childPv->size() <= MAX_PLY);
+        length = childPv ? childPv->length : 0;
+
+        if (childPv)
+            std::memcpy(moves + 1, childPv->moves, length * sizeof(Move));
+
+        moves[0] = move;
+        ++length;
+    }
+
+    PVMoves& operator=(const RootPVMoves& rhs) {
+        length = std::min(rhs.size(), usize(MAX_PLY));
+        std::memcpy(moves, rhs.data(), length * sizeof(Move));
+        return *this;
+    }
+};
+
 // Stack struct keeps track of the information we need to remember from nodes
 // shallower and deeper in the tree during the search. Each search thread has
 // its own array of Stack objects, indexed by the current ply.
 struct Stack {
-    Move*                       pv;
+    PVMoves*                    pv;
     PieceToHistory*             continuationHistory;
     CorrectionHistory<PieceTo>* continuationCorrectionHistory;
     int                         ply;
@@ -81,41 +131,42 @@ struct Stack {
     bool                        inCheck;
     bool                        ttPv;
     bool                        ttHit;
+    bool                        followPV;
     int                         cutoffCnt;
     int                         reduction;
-    //from Shashin Crystal begin
-    bool secondaryLine = false;
-    bool mainLine      = false;
-    //from Shashin Crystal end
 };
-
 
 // RootMove struct is used for moves at the root of the tree. For each root move
 // we store a score and a PV (really a refutation in the case of moves which
 // fail low). Score is normally set at -VALUE_INFINITE for all non-pv moves.
 struct RootMove {
 
-    explicit RootMove(Move m) :
-        pv(1, m) {}
+    explicit RootMove(Move m) { pv.push_back(m); }
     bool extract_ponder_from_tt(const TranspositionTable& tt, Position& pos);
+    bool is_inexact() const { return inexactLower || inexactUpper; }
+    bool is_exact_loss() const {
+        return score != -VALUE_INFINITE && is_loss(score) && !is_inexact();
+    }
+    void unset_inexact() { inexactLower = inexactUpper = false; }
     bool operator==(const Move& m) const { return pv[0] == m; }
     // Sort in descending order
     bool operator<(const RootMove& m) const {
         return m.score != score ? m.score < score : m.previousScore < previousScore;
     }
 
-    uint64_t          effort           = 0;
-    Value             score            = -VALUE_INFINITE;
-    Value             previousScore    = -VALUE_INFINITE;
-    Value             averageScore     = -VALUE_INFINITE;
-    Value             meanSquaredScore = -VALUE_INFINITE * VALUE_INFINITE;
-    Value             uciScore         = -VALUE_INFINITE;
-    bool              scoreLowerbound  = false;
-    bool              scoreUpperbound  = false;
-    int               selDepth         = 0;
-    int               tbRank           = 0;
-    Value             tbScore          = 0;  //for windows build
-    std::vector<Move> pv;
+    u64         effort           = 0;
+    Value       score            = -VALUE_INFINITE;
+    Value       previousScore    = -VALUE_INFINITE;
+    Value       averageScore     = -VALUE_INFINITE;
+    Value       meanSquaredScore = -VALUE_INFINITE * VALUE_INFINITE;
+    Value       uciScore         = -VALUE_INFINITE;
+    bool        inexactLower     = false;  // By default root scores are exact, unless flagged as a
+    bool        inexactUpper     = false;  // one-sided bound here. See also `enum Bound` in types.h
+    bool        previousScoreExact = false;
+    int         selDepth           = 0;
+    int         tbRank             = 0;
+    Value       tbScore            = 0;  // for windows build
+    RootPVMoves pv, previousPV;
 };
 
 using RootMoves = std::vector<RootMove>;
@@ -137,10 +188,9 @@ struct LimitsType {
     std::vector<std::string> searchmoves;
     TimePoint                time[COLOR_NB], inc[COLOR_NB], npmsec, movetime, startTime;
     int                      movestogo, depth, mate, perft, infinite;
-    uint64_t                 nodes;
+    u64                      nodes;
     bool                     ponderMode;
 };
-
 
 // The UCI stores the uci options, thread pool, and transposition table.
 // This struct is used to easily forward data to the Search::Worker class.
@@ -184,13 +234,13 @@ struct InfoShort {
 
 struct InfoFull: InfoShort {
     int              selDepth;
-    size_t           multiPV;
+    usize            multiPV;
     std::string_view wdl;
     std::string_view bound;
-    size_t           timeMs;
-    size_t           nodes;
-    size_t           nps;
-    size_t           tbHits;
+    usize            timeMs;
+    usize            nodes;
+    usize            nps;
+    usize            tbHits;
     std::string_view pv;
     int              hashfull;
 };
@@ -198,10 +248,11 @@ struct InfoFull: InfoShort {
 struct InfoIteration {
     int              depth;
     std::string_view currmove;
-    size_t           currmovenumber;
+    usize            currmovenumber;
 };
 
-//no skill
+//no Skill: Alexander has its own handicap mode (Eval::handicapConfig)
+
 // SearchManager manages the search from the main thread. It is responsible for
 // keeping track of the time, and storing data strictly related to the main thread.
 class SearchManager: public ISearchManager {
@@ -210,12 +261,14 @@ class SearchManager: public ISearchManager {
     using UpdateFull     = std::function<void(const InfoFull&)>;
     using UpdateIter     = std::function<void(const InfoIteration&)>;
     using UpdateBestmove = std::function<void(std::string_view, std::string_view)>;
+    using UpdateStart    = std::function<void()>;
 
     struct UpdateContext {
         UpdateShort    onUpdateNoMoves;
         UpdateFull     onUpdateFull;
         UpdateIter     onIter;
         UpdateBestmove onBestmove;
+        UpdateStart    onStart;
     };
 
 
@@ -224,24 +277,21 @@ class SearchManager: public ISearchManager {
 
     void check_time(Search::Worker& worker) override;
 
-    void pv(Search::Worker&           worker,
-            const ThreadPool&         threads,
-            const TranspositionTable& tt,
-            Depth                     depth,
-            bool                      updateShashin);  //shashin
+    void output_pv(Search::Worker&           worker,
+                   const ThreadPool&         threads,
+                   const TranspositionTable& tt,
+                   Depth                     depth);
 
-    Alexander::TimeManagement tm;
-    double                    originalTimeAdjust;
-    int                       callsCnt;
-    std::atomic_bool          ponder;
+    TimeManagement   tm;
+    double           originalTimeAdjust;
+    int              callsCnt;
+    std::atomic_bool ponder;
 
     std::array<Value, 4> iterValue;
     double               previousTimeReduction;
     Value                bestPreviousScore;
     Value                bestPreviousAverageScore;
     bool                 stopOnPonderhit;
-
-    size_t id;
 
     const UpdateContext& updates;
 };
@@ -251,20 +301,20 @@ class NullSearchManager: public ISearchManager {
     void check_time(Search::Worker&) override {}
 };
 
-
 // Search::Worker is the class that does the actual search.
 // It is instantiated once per thread, and it is responsible for keeping track
 // of the search history, and storing data required for the search.
 class Worker {
    public:
-    size_t threadIdx;  //mcts
     Worker(SharedState&,
            std::unique_ptr<ISearchManager>,
-           size_t,
-           size_t,
-           size_t,
+           usize,
+           usize,
+           usize,
            NumaReplicatedAccessToken);
-    ~Worker();  //shashin
+
+    ~Worker();
+
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
     void clear();
@@ -279,26 +329,29 @@ class Worker {
     //from Montecarlo begin
     Value minimax_value(Position& pos, Search::Stack* ss, Depth depth);
     Value minimax_value(Position& pos, Search::Stack* ss, Depth depth, Value alpha, Value beta);
-    //from Montecarlo end
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
     LowPlyHistory    lowPlyHistory;
 
     CapturePieceToHistory           captureHistory;
-    ContinuationHistory             continuationHistory[2][2];
     CorrectionHistory<Continuation> continuationCorrectionHistory;
 
     TTMoveHistory    ttMoveHistory;
     SharedHistories& sharedHistory;
-    RootMoves        rootMoves;                          //mcts
-    Depth            completedDepth;                     //mcts
-    bool             nmpGuard = false, nmpSide = false;  //from Crystal-shashin
-    ShashinManager&  getShashinManager();                //from crystal-Shashin
-    int              lastShashinUpdatedDepth = 0;        //from shashin
+    RootMoves        rootMoves;
+    ContinuationHistory (&continuationHistory)[2][2];
+    usize threadIdx;
+
+    Depth           completedDepth;
+    ShashinManager& getShashinManager();
+    int             lastShashinUpdatedDepth = 0;
+    // [SC] True for the thread that runs the Shashin analysis of the root in the current
+    // search (static state + WDL zone of its own search), see start_searching()
+    bool shashinRootAnalysis = false;
 
    private:
-    void iterative_deepening();
+    bool iterative_deepening();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
@@ -309,14 +362,14 @@ class Worker {
 
     // This is the main search function, for both PV and non-PV nodes
     template<NodeType nodeType>
-    Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
+    Value
+    search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, const bool cutNode);
 
     // Quiescence search function, which is called by the main search
     template<NodeType nodeType>
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
 
-    Depth
-    reduction(bool i, Depth d, int mn, int delta, bool isStrategical, bool isAggressive) const;
+    int reduction(bool i, Depth d, int mn, int delta) const;
 
     // Pointer to the search manager, only allowed to be called by the main thread
     SearchManager* main_manager() const {
@@ -325,27 +378,29 @@ class Worker {
     }
 
     TimePoint elapsed() const;
-    TimePoint elapsed_time() const;
 
     Value evaluate(const Position&);
 
     LimitsType limits;
 
-    size_t                pvIdx, pvLast;
-    std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
-    int                   selDepth, nmpMinPly;
-    Value                 optimism[COLOR_NB];
+    usize              pvIdx, pvLast;
+    RelaxedAtomic<u64> nodes, tbHits, bestMoveChanges;
+    int                selDepth, nmpMinPly;
+
+    Value optimism[COLOR_NB];
 
     Position  rootPos;
     StateInfo rootState;
-    //mcts
-    Depth rootDepth;  //mcts
-    Value rootDelta;
+    Depth     rootDepth;
+    Value     rootDelta;
 
-    size_t                    numaThreadIdx, numaTotal;  //for mcts
-    bool                      fullSearch      = false;   //full threads patch
-    bool                      antiDancingMode = false;   //anti dancing option
+    PVMoves lastIterationIdxPV;
+
+    usize                     numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;
+
+    bool fullSearch      = false;
+    bool antiDancingMode = false;
 
     // Reductions lookup table initialized at startup
     std::array<int, MAX_MOVES> reductions;  // [depth or moveNumber]
@@ -355,18 +410,18 @@ class Worker {
 
     Tablebases::Config tbConfig;
 
-    //From PolyFish begin
     BookManager& bookMan;
-    //From PolyFish end
+
     const OptionsMap&   options;
     ThreadPool&         threads;
     TranspositionTable& tt;
-    //for classical
-    //Shashin begin
+    //for classical: no network and no accumulators
+
     std::unique_ptr<ShashinManager> shashinManager;
-    const Alexander::ShashinConfig& shConfig;
+    // [SC] Copy, not a reference: the SharedState passed to ThreadPool::set() is a temporary
+    const Alexander::ShashinConfig shConfig;
+
     friend class Alexander::ThreadPool;
-    //Shashin end
     friend class SearchManager;
 };
 
@@ -374,7 +429,7 @@ struct ConthistBonus {
     int index;
     int weight;
 };
-//livebook begin
+
 #ifdef USE_LIVEBOOK
 void set_livebook_depth(int book_depth);
 void set_proxy_url(const std::string& proxy_url);
@@ -394,18 +449,16 @@ void update_online_tablebases();
 
 void set_chess_db_contribute(bool chess_db_contribute);
 void set_proxy_diversity(bool proxy_diversity);
-
-
 #endif
-//livebook end
 
-void set_variety(const std::string& varietyOption);  //variety
+void set_variety(const std::string& varietyOption);
+
 }  // namespace Search
-//from Livebook begin
+
 #ifdef USE_LIVEBOOK
 size_t cURL_WriteFunc(void* contents, size_t size, size_t nmemb, std::string* s);
 #endif
-//from Livebook end
+
 }  // namespace Alexander
 
 #endif  // #ifndef SEARCH_H_INCLUDED

@@ -13,23 +13,23 @@ constexpr Depth ADJUSTED_QS_DEPTH       = DEPTH_QS + 2;
 // REFACTORING: Enum sequenziale ordinato logicamente (Spettro Petrosian -> Capablanca -> Tal)
 // Questo permette di usare operatori >= e <= per i range.
 enum class ShashinPosition : uint8_t {
-    HIGH_PETROSIAN           = 0,
-    MIDDLE_HIGH_PETROSIAN    = 1,
-    MIDDLE_PETROSIAN         = 2,
-    MIDDLE_LOW_PETROSIAN     = 3,
-    LOW_PETROSIAN            = 4,
-    
-    CAPABLANCA_PETROSIAN     = 5,
-    CAPABLANCA               = 6,
-    CAPABLANCA_TAL           = 7,
-    
-    LOW_TAL                  = 8,
-    MIDDLE_LOW_TAL           = 9,
-    MIDDLE_TAL               = 10,
-    MIDDLE_HIGH_TAL          = 11,
-    HIGH_TAL                 = 12,
-    
-    TAL_CAPABLANCA_PETROSIAN = 13 // Total Chaos / Undefined
+    HIGH_PETROSIAN        = 0,
+    MIDDLE_HIGH_PETROSIAN = 1,
+    MIDDLE_PETROSIAN      = 2,
+    MIDDLE_LOW_PETROSIAN  = 3,
+    LOW_PETROSIAN         = 4,
+
+    CAPABLANCA_PETROSIAN = 5,
+    CAPABLANCA           = 6,
+    CAPABLANCA_TAL       = 7,
+
+    LOW_TAL         = 8,
+    MIDDLE_LOW_TAL  = 9,
+    MIDDLE_TAL      = 10,
+    MIDDLE_HIGH_TAL = 11,
+    HIGH_TAL        = 12,
+
+    TAL_CAPABLANCA_PETROSIAN = 13  // Total Chaos / Undefined
 };
 
 // Win probability ranges - made constexpr
@@ -46,6 +46,13 @@ constexpr int   MIDDLE_LOW_TAL_MAX        = 84;
 constexpr int   MIDDLE_TAL_MAX            = 89;
 constexpr int   MIDDLE_HIGH_TAL_MAX       = 94;
 constexpr int   HIGH_TAL_MAX              = 100;
+// [SC] Pure Capablanca (dead draw): win probability == CAPABLANCA_MAX and draw probability
+// >= CAPABLANCA_MIN_DRAW; otherwise win probability 50 is total chaos (TAL_CAPABLANCA_PETROSIAN).
+// The Stockfish 19 WDL model never reaches a 100% draw (at eval 0 its maximum is 99%), so the
+// old "draw == 100" test could never succeed. With 99 the pure Capablanca region (material
+// <= 59, |eval| up to about 26-73 internal units) matches the one ShashChess 41 had with its
+// WDL coefficients (draw == 100 for material <= 52). The zone thresholds are unchanged.
+constexpr int   CAPABLANCA_MIN_DRAW       = 99;
 constexpr Value PawnConversionFactor      = 356;
 constexpr Value VALUE_TB_WIN              = 51 * PawnConversionFactor;
 constexpr Value VALUE_MAX_EVAL            = VALUE_TB_WIN - 8 * PawnConversionFactor;
@@ -126,8 +133,8 @@ struct RootShashinStateBase {
     StaticState         staticState;
 };
 
-constexpr size_t BASE_SIZE = sizeof(RootShashinStateBase);
-constexpr size_t TARGET_SIZE = 64;
+constexpr size_t BASE_SIZE    = sizeof(RootShashinStateBase);
+constexpr size_t TARGET_SIZE  = 64;
 constexpr size_t PADDING_SIZE = (BASE_SIZE < TARGET_SIZE) ? (TARGET_SIZE - BASE_SIZE) : 0;
 
 // Ensure proper alignment for performance
@@ -136,22 +143,23 @@ struct RootShashinState {
     DynamicDerivedState dynamicDerived;
     StaticState         staticState;
     uint8_t             padding[PADDING_SIZE];
-    
+
     RootShashinState() :
         dynamicBase(),
         dynamicDerived(),
-        staticState()
-    {
-        for (size_t i = 0; i < sizeof(padding); ++i) {
+        staticState() {
+        for (size_t i = 0; i < sizeof(padding); ++i)
+        {
             padding[i] = 0;
         }
     }
-    
+
     void clear() {
-        dynamicBase = DynamicBaseState();
+        dynamicBase    = DynamicBaseState();
         dynamicDerived = DynamicDerivedState();
-        staticState = StaticState();
-        for (size_t i = 0; i < sizeof(padding); ++i) {
+        staticState    = StaticState();
+        for (size_t i = 0; i < sizeof(padding); ++i)
+        {
             padding[i] = 0;
         }
     }

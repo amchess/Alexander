@@ -328,9 +328,13 @@ Value get_handicap_value(Value           baseEvaluation,
     baseEvaluation += (increaseEvaluation ? errorMagnitude : -errorMagnitude);
 
     // **Clamp final to ensure the value remains valid**
-    uint8_t wp = WDLModel::get_win_probability(baseEvaluation, pos);
-    baseEvaluation =
-      std::clamp(baseEvaluation, min_max_threshold[wp].min_value, min_max_threshold[wp].max_value);
+    // The thresholds of a win probability class come from the adjacent classes, so they are
+    // usually inverted (min_value > max_value): std::clamp() with lo > hi is undefined (it
+    // aborts in debug builds) and in release it moved the value to one of the two bounds.
+    // Clamp to the band between the two thresholds, whatever their order.
+    uint8_t    wp     = WDLModel::get_win_probability(baseEvaluation, pos);
+    const auto bounds = std::minmax(min_max_threshold[wp].min_value, min_max_threshold[wp].max_value);
+    baseEvaluation    = std::clamp(baseEvaluation, bounds.first, bounds.second);
 
     return baseEvaluation;
 }

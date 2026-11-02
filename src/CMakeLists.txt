@@ -14,7 +14,7 @@ set(PREFIX /usr/local)
 set(BINDIR ${PREFIX}/bin)
 
 # Source and header files
-set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp 
+set(SRCS attacks.cpp benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp 
         handicap/evaluate_handicap.cpp handicap/trace/trace.cpp handicap/trace/general.cpp handicap/trace/material_element.cpp 
         handicap/trace/imbalances.cpp handicap/trace/pawns_element.cpp handicap/trace/passed_pawns.cpp 
         handicap/trace/knights.cpp handicap/trace/bishops.cpp handicap/trace/major_pieces.cpp handicap/trace/king_safety_and_threats.cpp
@@ -28,23 +28,23 @@ set(SRCS benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate.cpp
         livebook/BaseLivebook.cpp livebook/LichessOpening.cpp livebook/LichessEndgame.cpp livebook/ChessDb.cpp
         livebook/analysis/Cp.cpp livebook/analysis/Analysis.cpp livebook/analysis/Wdl.cpp livebook/analysis/Mate.cpp
         livebook/LichessLivebook.cpp livebook/LichessMaster.cpp livebook/LichessPlayer.cpp livebook/LichessUsers.cpp
-        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp) shashin/shashin_manager.cpp shashin/moveconfig.cpp
+        livebook/LichessGames.cpp livebook/Proxy.cpp livebook/ChessDBContributor.cpp shashin/shashin_manager.cpp shashin/moveconfig.cpp)
 
-set(HEADERS benchmark.h bitboard.h endgame.h evaluate.h 
+set(HEADERS attacks.h benchmark.h bitboard.h endgame.h evaluate.h 
         handicap/evaluate_handicap.h handicap/trace/trace.h handicap/trace/general.h handicap/trace/material_element.h 
         handicap/trace/imbalances.h handicap/trace/pawns_element.h handicap/trace/passed_pawns.h
         handicap/trace/knights.h handicap/trace/bishops.h handicap/trace/major_pieces.h handicap/trace/king_safety_and_threats.h
 	    handicap/trace/mobility.h handicap/trace/space.h handicap/trace/winnable.h handicap/trace/makogonov.h handicap/trace/legal_moves.h
         material.h misc.h movegen.h movepick.h history.h pawns.h
-        position.h psqt.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h
-        tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h
+        position.h psqt.h search.h syzygy/tbprobe.h thread.h thread_native.h timeman.h
+        tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h shm.h shm_unix.h
         book/file_mapping.h book/book.h book/book_manager.h book/polyglot/polyglot.h book/ctg/ctg.h learn/learn.h mcts/montecarlo.h
         wdl/win_probability.h
         livebook/BaseLivebook.h livebook/LichessOpening.h livebook/LichessEndgame.h livebook/ChessDb.h
         livebook/analysis/Cp.h livebook/analysis/Analysis.h livebook/analysis/Wdl.h livebook/analysis/Mate.h
         livebook/LichessLivebook.h livebook/LichessMaster.h livebook/LichessPlayer.h livebook/LichessUsers.h livebook/Proxy.h
         livebook/LichessGames.h livebook/ChessDBContributor.h
-        livebook/json/json.hpp) shashin/shashin_manager.h shashin/moveconfig.h
+        livebook/json/json.hpp shashin/shashin_manager.h shashin/moveconfig.h)
 
 
 # Set default values for options

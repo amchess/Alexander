@@ -26,6 +26,8 @@
 
 namespace Alexander {
 
+using namespace Attacks;  // Stockfish 19 moved the attack tables to Alexander::Attacks
+
 namespace {
 
 #define V Value

@@ -9,6 +9,8 @@ extern thread_local bool useMoveShashinLogic;
 extern thread_local bool isStrategical;
 extern thread_local bool isAggressive;
 extern thread_local bool isFortress;
+// [SC] Tal, Petrosian or king danger: enables the "tactical phase" ordering bonus
+extern thread_local bool isTactical;
 
 }  // namespace MoveConfig
 }  // namespace Alexander

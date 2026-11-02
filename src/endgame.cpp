@@ -24,6 +24,8 @@
 
 namespace Alexander {
 
+using namespace Attacks;  // Stockfish 19 moved the attack tables to Alexander::Attacks
+
 namespace {
 
 // Used to drive the king towards the edge of the board

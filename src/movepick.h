@@ -20,11 +20,11 @@
 #define MOVEPICK_H_INCLUDED
 
 #include "history.h"
-//from shashin begin
+// [SC:shashin] begin
 #include "shashin/shashin_position.h"
 #include "shashin/moveconfig.h"
 #include "bitboard.h"
-//from shashin end
+// [SC:shashin] end
 namespace Alexander {
 static constexpr uint8_t AdjPawnCount[8] = {0, 1, 2, 2, 2, 2, 1, 0};
 class Position;
@@ -58,9 +58,7 @@ class MovePicker {
     template<typename Pred>
     Move select(Pred);
     template<GenType T>
-    ExtMove* score(MoveList<T>&);
-    ExtMove* begin() { return cur; }
-    ExtMove* end() { return endCur; }
+    ExtMove* score(const MoveList<T>&);
 
     const Position&              pos;
     const ButterflyHistory*      mainHistory;
