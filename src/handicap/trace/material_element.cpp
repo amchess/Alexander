@@ -17,7 +17,7 @@ std::string analyze_material(const Position& pos, int phase) {
     Trace::Helpers::append_term_row(ss, pos, phase, "Material", Trace::MATERIAL);
     ss << "=== MATERIAL SUBELEMENTS ===\n";
 
-    // Bishop Pair - sottoelemento di Material
+    // Bishop pair - sub-element of Material
     ss << "Bishop Pair:\n";
     bool whiteHasPair = popcount(pos.pieces(WHITE, BISHOP)) >= 2;
     bool blackHasPair = popcount(pos.pieces(BLACK, BISHOP)) >= 2;

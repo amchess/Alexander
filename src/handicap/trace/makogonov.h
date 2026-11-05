@@ -12,7 +12,7 @@
 namespace Alexander {
 
 namespace Eval {
-std::string generate_makogonov_ranking(const Position& pos, Pawns::Entry* pawnEntry);
+std::string generate_makogonov_ranking(const Position& pos, Pawns::Entry* pawnEntry, const std::string& gamePhase);
 }  // namespace Eval
 
 }  // namespace Alexander

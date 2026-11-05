@@ -18,7 +18,7 @@ set(SRCS attacks.cpp benchmark.cpp bitbase.cpp bitboard.cpp endgame.cpp evaluate
         handicap/evaluate_handicap.cpp handicap/trace/trace.cpp handicap/trace/general.cpp handicap/trace/material_element.cpp 
         handicap/trace/imbalances.cpp handicap/trace/pawns_element.cpp handicap/trace/passed_pawns.cpp 
         handicap/trace/knights.cpp handicap/trace/bishops.cpp handicap/trace/major_pieces.cpp handicap/trace/king_safety_and_threats.cpp
-	    handicap/trace/mobility.cpp handicap/trace/space.cpp handicap/trace/winnable.cpp handicap/trace/makogonov.cpp handicap/trace/legal_moves.cpp
+	    handicap/trace/mobility.cpp handicap/trace/space.cpp handicap/trace/winnable.cpp handicap/trace/makogonov.cpp handicap/trace/legal_moves.cpp handicap/trace/plans.cpp handicap/trace/verdict.cpp
         main.cpp material.cpp misc.cpp movegen.cpp movepick.cpp pawns.cpp position.cpp psqt.cpp
         search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp
         learn/learn.cpp mcts/montecarlo.cpp
@@ -34,7 +34,7 @@ set(HEADERS attacks.h benchmark.h bitboard.h endgame.h evaluate.h
         handicap/evaluate_handicap.h handicap/trace/trace.h handicap/trace/general.h handicap/trace/material_element.h 
         handicap/trace/imbalances.h handicap/trace/pawns_element.h handicap/trace/passed_pawns.h
         handicap/trace/knights.h handicap/trace/bishops.h handicap/trace/major_pieces.h handicap/trace/king_safety_and_threats.h
-	    handicap/trace/mobility.h handicap/trace/space.h handicap/trace/winnable.h handicap/trace/makogonov.h handicap/trace/legal_moves.h
+	    handicap/trace/mobility.h handicap/trace/space.h handicap/trace/winnable.h handicap/trace/makogonov.h handicap/trace/legal_moves.h handicap/trace/plans.h handicap/trace/verdict.h
         material.h misc.h movegen.h movepick.h history.h pawns.h
         position.h psqt.h search.h syzygy/tbprobe.h thread.h thread_native.h timeman.h
         tt.h tune.h types.h uci.h ucioption.h perft.h engine.h score.h numa.h memory.h shm.h shm_unix.h

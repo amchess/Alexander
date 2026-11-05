@@ -29,6 +29,7 @@ namespace Eval {
 std::string trace(Position& pos);  //for classical
 Value       evaluate(const Position& pos);
 Value       evaluate_position(const Position& pos); //for trace
+Value       evaluate_position_any(const Position& pos);  // [SC:trace] also in check
 }  // namespace Eval
 
 }  // namespace Alexander

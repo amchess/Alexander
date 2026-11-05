@@ -1,27 +1,32 @@
 #include "../../evaluate.h"
 #include "trace.h"
+#include "bishops.h"
 #include "../evaluate_handicap.h"
 #include "../../uci.h"
 #include "../../movegen.h"
 #include "../../bitboard.h"
 #include <sstream>
-#include "bishops.h"
+#include <iomanip>
 
 namespace Alexander {
-
+namespace Eval {
 
 using namespace Trace;
 
-namespace Eval {
-
 std::string
 analyze_bishops(const Position& pos, int phase, const std::string& gamePhase, Value v_white) {
+    (void)phase; // Silence the unused parameter warning
     std::stringstream ss;
+    
+    // =========================================================================
+    // BLOCK 1: ORIGINAL OUTPUT, UNCHANGED
+    // =========================================================================
     Trace::Helpers::append_term_row(ss, pos, phase, "Bishops", BISHOP);
+    
     if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
         ss << "=== BISHOP SUBELEMENTS ===\n";
-        // REGOLA DI DOVORETSKY PER FINALI DI ALFIERI DI COLORE CONTRARIO
+        // DVORETSKY'S RULE FOR OPPOSITE-COLOURED BISHOP ENDINGS
         ss << "Dvoretsky's Rule for Opposite-Colored Bishops:\n";
         auto square_color = [](Square s) -> Color {
             return (file_of(s) + rank_of(s)) % 2 == 0 ? BLACK : WHITE;
@@ -155,11 +160,101 @@ analyze_bishops(const Position& pos, int phase, const std::string& gamePhase, Va
             }
         }
         ss << "\n";
+        
+        // =========================================================================
+        // BLOCK 2: UPDATED OUTPUT (MASTER REPORT / ADVANCED MODULES)
+        // =========================================================================
+        ss << "================================================================\n";
+        ss << "=== ADVANCED BISHOP MODULES ===\n\n";
+
+        // 1. ENGINE NUMERICAL SCORES
+        
+        Trace::Helpers::append_score_block(ss, pos, "Bishop Positional Scores (Mobility, Outposts, X-Rays, Blockages)", BISHOP);
+
+        bool is_ocb_endgame_adv = false;
+        bool dvoretsky_violation_adv = false;
+        Color weakerSideAdv = WHITE;
+        int oppositeColorCountAdv = 0;
+
+        ss << "Structural Analysis (Opposite-Colored Bishops):\n";
+        
+        if (isEndgame && popcount(whiteBishops) == 1 && popcount(blackBishops) == 1) {
+            Square wBishopSq = lsb(whiteBishops);
+            Square bBishopSq = lsb(blackBishops);
+
+            if (square_color(wBishopSq) != square_color(bBishopSq)) {
+                is_ocb_endgame_adv = true;
+                ss << "  - Opposite-colored bishops endgame detected.\n";
+                
+                weakerSideAdv = (v_white < 0) ? WHITE : BLACK;
+                ss << "  - The defending side (eval-based) is: " << (weakerSideAdv == WHITE ? "White" : "Black") << "\n";
+
+                Square weakerBishopSq = (weakerSideAdv == WHITE) ? wBishopSq : bBishopSq;
+                Color bishopColor = square_color(weakerBishopSq);
+                ss << "  - Defender's bishop operates on " << color_name(bishopColor) << " squares.\n";
+
+                Bitboard weakerPawns = pos.pieces(weakerSideAdv, PAWN);
+                Bitboard pawnsOnSameColor = 0;
+                Bitboard pawnsOnOppositeColor = 0;
+
+                while (weakerPawns) {
+                    Square pawnSq = pop_lsb(weakerPawns);
+                    if (square_color(pawnSq) == bishopColor) pawnsOnSameColor |= pawnSq;
+                    else pawnsOnOppositeColor |= pawnSq;
+                }
+
+                oppositeColorCountAdv = popcount(pawnsOnOppositeColor);
+                int sameColorCount = popcount(pawnsOnSameColor);
+
+                ss << "  - Defender's Pawn Structure:\n"
+                   << "      On same color as bishop: " << sameColorCount << " pawns.\n"
+                   << "      On opposite color      : " << oppositeColorCountAdv << " pawns.\n";
+
+                // Dvoretsky Check
+                if (oppositeColorCountAdv > 0) {
+                    dvoretsky_violation_adv = true;
+                    ss << "  - Dvoretsky Rule Status: VIOLATION. Defender has " << oppositeColorCountAdv 
+                       << " pawn(s) vulnerable on the opponent's bishop color.\n";
+                } else {
+                    ss << "  - Dvoretsky Rule Status: OPTIMAL. All defending pawns form a blockade on the correct color.\n";
+                }
+            } else {
+                ss << "  - Bishops are on the same color complex.\n";
+            }
+        } else if (isEndgame && (popcount(whiteBishops) == 1 || popcount(blackBishops) == 1)) {
+            ss << "  - Single bishop endgame (not an OCB endgame).\n";
+        } else {
+            ss << "  - Not an opposite-colored bishops endgame.\n";
+        }
+
+        // DYNAMIC OTB STRATEGIC SYNTHESIS
+        ss << "\n--- OTB STRATEGIC SYNTHESIS ---\n";
+        
+        // Theory Branch
+        if (is_ocb_endgame_adv) {
+            ss << "  * Theory : Opposite-Colored Bishop endgames are notoriously drawish because neither side can attack the squares the other bishop defends. The attacker MUST create passed pawns on opposite sides of the board to stretch the defender.\n";
+        } else {
+            ss << "  * Theory : Bishops act as long-range snipers. Their value scales with the openness of the board and their ability to operate on unopposed color complexes.\n";
+        }
+
+        // Action Branch
+        ss << "  * Action : ";
+        if (is_ocb_endgame_adv && dvoretsky_violation_adv) {
+            ss << (weakerSideAdv == WHITE ? "White" : "Black") << " is violating Dvoretsky's Rule. The defender MUST immediately push their pawns onto the color of their OWN Bishop (" << oppositeColorCountAdv << " pawns are currently vulnerable on the wrong color).\n";
+        } else if (is_ocb_endgame_adv && !dvoretsky_violation_adv) {
+            ss << (weakerSideAdv == WHITE ? "White" : "Black") << " has correctly established a Dvoretsky Blockade. The attacker must sacrifice a pawn to create a second weakness on the other side of the board to break the fortress.\n";
+        } else if (popcount(pos.pieces(WHITE, BISHOP)) >= 2) {
+            ss << "White holds the Bishop Pair. White must aggressively open the center by trading pawns. Black must keep the pawn structure closed and restrict diagonals.\n";
+        } else if (popcount(pos.pieces(BLACK, BISHOP)) >= 2) {
+            ss << "Black holds the Bishop Pair. Black must aggressively open the center by trading pawns. White must keep the pawn structure closed and restrict diagonals.\n";
+        } else {
+            ss << "Place your pawns on the OPPOSITE color of your active Bishop to give it open diagonals. If the opponent has a strong Bishop, place your pawns on its color to blunt its scope.\n";
+        }
+
+        ss << "\n";
     }
-    ss << "\n";
     return ss.str();
 }
 
-}
-
-}  // namespace Alexander
+} // namespace Eval
+} // namespace Alexander

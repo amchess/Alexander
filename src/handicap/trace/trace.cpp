@@ -14,6 +14,8 @@
 #include "winnable.h"
 #include "makogonov.h"
 #include "legal_moves.h"
+#include "plans.h"
+#include "verdict.h"
 #include "../evaluate_handicap.h"
 #include "../../pawns.h"
 #include "../../uci.h"
@@ -27,8 +29,8 @@
 namespace Alexander {
 
 namespace Trace {
-// for improved trace begin
-// Funzione per determinare la zona di Shashin basata sulla win probability
+
+// Shashin zone from the win probability
 std::string get_shashin_zone(uint8_t winProb, Color sideToMove) {
     if (sideToMove == WHITE)
     {
@@ -91,7 +93,7 @@ std::string get_shashin_zone(uint8_t winProb, Color sideToMove) {
     }
 }
 
-// Funzione per calcolare la fase del gioco
+// Game phase
 std::string get_game_phase(const Position& pos) {
     constexpr float kingMatFase   = 3.0f;
     constexpr float queenMatFase  = 9.9f;
@@ -131,7 +133,8 @@ std::string get_game_phase(const Position& pos) {
 
     return faseDesc;
 }
-// Funzione per ottenere il nome del pezzo
+
+// Name of a piece type
 std::string piece_type_name(PieceType pt) {
     switch (pt)
     {
@@ -149,9 +152,9 @@ std::string piece_type_name(PieceType pt) {
         return "Unknown";
     }
 }
-namespace {
 
-// Costanti dalla valutazione dei pedoni
+namespace {
+// Constants of the pawn evaluation
 constexpr ScoreForClassical Backward           = make_score(6, 19);
 constexpr ScoreForClassical Doubled            = make_score(11, 51);
 constexpr ScoreForClassical DoubledEarly       = make_score(17, 7);
@@ -161,8 +164,8 @@ constexpr ScoreForClassical WeakUnopposed      = make_score(15, 18);
 constexpr ScoreForClassical BlockedPawn[2]     = {make_score(-19, -8), make_score(-7, 3)};
 constexpr int               Connected[RANK_NB] = {0, 3, 7, 7, 15, 54, 86};
 }
-// for improved trace begin
-// Funzione helper per determinare l'area di un square
+
+// Area (queen side / center / king side) of a square
 Area area_of(Square s) {
     File f = file_of(s);
     if (f <= FILE_C)
@@ -172,7 +175,7 @@ Area area_of(Square s) {
     return KING_SIDE;
 }
 
-// Array per i conteggi di mobilità dettagliati [COLOR][AREA]
+// Detailed mobility counts [COLOR][AREA]
 int mobility_area_counts[COLOR_NB][AREA_NB] = {0};
 
 ScoreForClassical scores[TERM_NB][COLOR_NB];
@@ -183,7 +186,9 @@ void add(int idx, ScoreForClassical w, ScoreForClassical b) {
     scores[idx][WHITE] = w;
     scores[idx][BLACK] = b;
 }
-}
+
+} // namespace Trace
+
 using namespace Trace;
 
 namespace Eval {
@@ -194,44 +199,66 @@ std::string trace_analysis(Position&          pos,
                            const std::string& shashinZone,
                            const std::string& gamePhase,
                            int                phase) {
-    std::stringstream ss;
+    // [SC:trace] The technical modules are collected first; the Master's Verdict, composed from
+    // the structured facts of the counterfactual analysis, is printed before them.
+    std::stringstream tech;
     Pawns::Entry*     pawnEntry = Pawns::probe(pos);
 
-    ss << generate_general_info(pos, v_white, winProb, shashinZone, gamePhase);
+    if (pos.checkers())
+        tech << "*** " << (pos.side_to_move() == WHITE ? "White" : "Black")
+             << " is in check: static values below are indicative only. ***\n\n";
+    tech << generate_general_info(pos, v_white, winProb, shashinZone, gamePhase);
 
-    ss << generate_main_table();
+    tech << generate_main_table(pos);
 
-    ss << analyze_material(pos, phase);
+    tech << analyze_material(pos, phase);
 
     if (Alexander::Eval::handicapConfig.imbalancesToEvaluate)
     {
-        ss << analyze_imbalances(pos, phase);
+        tech << analyze_imbalances(pos, phase);
     }
 
     if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
-        ss << analyze_pawns(pos, phase);
-        ss << analyze_passed_pawns(pos, pawnEntry, phase);
+        tech << analyze_pawns(pos, phase);
+        tech << analyze_passed_pawns(pos, pawnEntry, phase);
     }
 
-    ss << analyze_knights(pos, phase, shashinZone);
-    ss << analyze_bishops(pos, phase, gamePhase, v_white);
-    ss << analyze_rooks_and_queens(pos, phase);
-    ss << analyze_king_safety_and_threats(pos, phase);
-    ss << analyze_mobility(pos, phase);
-    ss << analyze_space(pos, phase, winProb);
+    tech << analyze_knights(pos, phase, shashinZone);
+    tech << analyze_bishops(pos, phase, gamePhase, v_white);
+    tech << analyze_rooks_and_queens(pos, phase);
+    tech << analyze_king_safety_and_threats(pos, phase);
+    tech << analyze_mobility(pos, phase);
+    tech << analyze_space(pos, phase, winProb);
 
     if (Alexander::Eval::handicapConfig.winnableToEvaluate)
     {
-        ss << analyze_winnable(pos, phase);
+        tech << analyze_winnable(pos, phase);
     }
 
-    // 4. ANALISI FINALI
-    ss << generate_makogonov_ranking(pos, pawnEntry);
-    ss << generate_legal_moves_analysis(pos);
+    // Final analyses (Makogonov ranking uses the game phase)
+    tech << generate_makogonov_ranking(pos, pawnEntry, gamePhase);
+    tech << generate_legal_moves_analysis(pos);
+
+    // [SC:trace] Counterfactual analysis (piece values, trades, plans). Run last: it evaluates
+    // many positions, and the trace table is saved/restored around every snapshot.
+    PlanFacts facts;
+    tech << generate_plans_analysis(pos, v_white, winProb, shashinZone, gamePhase, phase, &facts);
+
+    std::stringstream ss;
+    ss << "Reading guide: the MASTER'S VERDICT (plain language) comes first; all the technical\n"
+          "parameters it is based on follow after the separator.\n\n";
+    ss << compose_verdict(pos, facts, v_white, winProb, shashinZone, gamePhase, phase);
+    ss << "\n"
+       << std::string(64, '#') << "\n"
+       << "####            TECHNICAL PARAMETERS AND DETAILS            ####\n"
+       << "####   (data behind the verdict above, for deeper study)    ####\n"
+       << std::string(64, '#') << "\n\n";
+    ss << tech.str();
 
     return ss.str();
 }
-}
 
-}  // namespace Alexander
+} // namespace Eval
+
+} // namespace Alexander

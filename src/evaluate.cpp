@@ -180,7 +180,7 @@ class Evaluation {
     // a white knight on g5 and black's king is on g8, this white knight adds 2
     // to kingAttacksCount[WHITE].
     int kingAttacksCount[COLOR_NB];
-    // Funzione helper per calcolare la mobilità dettagliata per area
+    // Helper that counts the detailed mobility by area
     template<Color Us, PieceType Pt>
     void update_mobility_area_counts(Bitboard attacks) {
         if constexpr (T)
@@ -286,7 +286,7 @@ ScoreForClassical Evaluation<T>::pieces() {
         int mob = popcount(b & mobilityArea[Us]);
         mobility[Us] += MobilityBonus[Pt - 2][mob];
 
-        // CALCOLA CONTEGGI MOBILITÀ DETTAGLIATI PER AREA (senza distinguere il pezzo)
+        // DETAILED MOBILITY COUNTS BY AREA (all piece types together)
         Bitboard mobility_attacks = b & mobilityArea[Us];
         update_mobility_area_counts<Us, Pt>(mobility_attacks);
 
@@ -827,10 +827,16 @@ Value Evaluation<T>::winnable(ScoreForClassical score) const {
 // parts of the evaluation and returns the value of the position from the point
 // of view of the side to move.
 
+// [SC:trace] Set only by evaluate_position_any() (debug builds check it in the assertion below)
+[[maybe_unused]] static bool AllowEvalInCheck = false;
+
 template<Tracing T>
 Value Evaluation<T>::value() {
 
-    assert(!pos.checkers());
+    // [SC:trace] The traced evaluation is also run on the root position when it is in check
+    // (the trace then marks the static values as indicative only), and the static probes of the
+    // trace evaluate positions in check through evaluate_position_any()
+    assert(T == TRACE || AllowEvalInCheck || !pos.checkers());
 
     // Probe the material hash table
     me = Material::probe(pos);
@@ -866,7 +872,9 @@ Value Evaluation<T>::value() {
                  + pos.non_pawn_material() / 32;
     };
 
-    if (lazy_skip(LazyThreshold1))
+    // [SC:trace] never take the lazy exits while tracing: they would leave all the dynamic
+    // terms (mobility, king safety, threats, ...) at zero in unbalanced positions.
+    if (!T && lazy_skip(LazyThreshold1))
         goto make_v;
 
     // Main evaluation begins here
@@ -885,14 +893,9 @@ Value Evaluation<T>::value() {
         score += apply_weights(knights, KNIGHT_INDEX) + apply_weights(bishops, BISHOP_INDEX)
                + apply_weights(rooks, ROOK_INDEX) + apply_weights(queens, QUEEN_INDEX);
 
-        // AGGIUNGI IL TRACING PER I PEZZI
-        if constexpr (T)
-        {
-            Trace::add(KNIGHT, knights);
-            Trace::add(BISHOP, bishops);
-            Trace::add(ROOK, rooks);
-            Trace::add(QUEEN, queens);
-        }
+        // [SC:trace] pieces<Us, Pt>() already stores the per-color score in the trace table:
+        // overwriting it with the net value (White = net, Black = 0) made every White/Black
+        // column of the trace wrong.
     }
     {
         ScoreForClassical mobilityScore = mobility[WHITE] - mobility[BLACK];
@@ -900,48 +903,36 @@ Value Evaluation<T>::value() {
 
         if constexpr (T)
         {
-            Trace::add(MOBILITY, mobilityScore);
+            Trace::add(MOBILITY, mobility[WHITE], mobility[BLACK]);  // [SC:trace] per color
         }
     }
     //from handicap mode end
     {
         ScoreForClassical kingSafetyScore = king<WHITE>() - king<BLACK>();
         score += apply_weights(kingSafetyScore, KING_SAFETY_INDEX);
-        if constexpr (T)
-        {
-            Trace::add(KING, kingSafetyScore);
-        }
+        // [SC:trace] the per-color score is already traced by the term function itself
     }
     //from handicap mode begin
     if (Alexander::Eval::handicapConfig.pawnsToEvaluate)
     {
         ScoreForClassical passedScore = passed<WHITE>() - passed<BLACK>();
         score += apply_weights(passedScore, PASSED_PAWN_INDEX);
-        if constexpr (T)
-        {
-            Trace::add(PASSED, passedScore);
-        }
+        // [SC:trace] the per-color score is already traced by the term function itself
     }
 
     //from handicap mode end
-    if (lazy_skip(LazyThreshold2))
+    if (!T && lazy_skip(LazyThreshold2))
         goto make_v;
 
     {
         ScoreForClassical threatsScore = threats<WHITE>() - threats<BLACK>();
         score += apply_weights(threatsScore, THREATS_INDEX);
-        if constexpr (T)
-        {
-            Trace::add(THREAT, threatsScore);
-        }
+        // [SC:trace] the per-color score is already traced by the term function itself
     }
     {
         ScoreForClassical spaceScore = space<WHITE>() - space<BLACK>();
         score += apply_weights(spaceScore, SPACE_INDEX);
-        if constexpr (T)
-        {
-            Trace::add(SPACE, spaceScore);
-        }
+        // [SC:trace] the per-color score is already traced by the term function itself
     }
 make_v:
     // Derive single value from mg and eg parts of score
@@ -967,6 +958,14 @@ namespace Eval {
 Value evaluate_position(const Position& pos) {
     assert(!pos.checkers());
     return Evaluation<NO_TRACE>(pos).value();
+}
+// [SC:trace] As evaluate_position(), but also accepted when the side to move is in check:
+// used only by the static quiescence probes of the trace, at their depth limit.
+Value evaluate_position_any(const Position& pos) {
+    AllowEvalInCheck = true;
+    const Value v    = Evaluation<NO_TRACE>(pos).value();
+    AllowEvalInCheck = false;
+    return v;
 }
 Value evaluate(const Position& pos) {
 
@@ -997,10 +996,11 @@ Value evaluate(const Position& pos) {
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
 std::string Eval::trace(Position& pos) {
-    if (pos.checkers())
-        return "Final evaluation: none (in check)";
+    // [SC:trace] In check the analysis is still produced: the Master's Verdict then focuses on
+    // the answer to the check, and the static terms below are marked as indicative only (the
+    // classical evaluation is not meant for positions in check).
 
-    // Inizializza le strutture per la trace
+    // Initialize the trace tables
     std::memset(Trace::scores, 0, sizeof(Trace::scores));
     std::memset(Trace::mobility_area_counts, 0, sizeof(Trace::mobility_area_counts));
 
@@ -1009,17 +1009,41 @@ std::string Eval::trace(Position& pos) {
     Evaluation<Trace::TRACE> eval(pos);
     Value                    v = eval.value();
 
-    // Converti il valore al punto di vista del bianco
+    // Value from White's point of view
     Value       v_white     = (pos.side_to_move() == WHITE) ? v : -v;
     uint8_t     winProb     = WDLModel::get_win_probability(v_white, pos);
     std::string shashinZone = get_shashin_zone(winProb, WHITE);
     std::string gamePhase   = get_game_phase(pos);
 
-    // Ottieni la fase di gioco per l'interpolazione
+    // Game phase for the interpolation
     Material::Entry* materialEntry = Material::probe(pos);
     int              phase         = materialEntry->game_phase();
 
-    // Chiama la funzione di analisi handicap per generare l'output della trace
+    // The handicap analysis function produces the trace output
     return Eval::trace_analysis(pos, v_white, winProb, shashinZone, gamePhase, phase);
 }
+
+// [SC:trace] begin
+// Runs a traced evaluation of 'pos' and returns a copy of the term table, restoring the
+// global trace tables afterwards: the counterfactual modules of the trace (candidate moves,
+// trades, pawn breaks) compare the term tables of several positions without disturbing the
+// table of the root position, which the other modules are still reading.
+Eval::TermSnapshot Eval::snapshot_terms(const Position& pos) {
+    ScoreForClassical savedScores[Trace::TERM_NB][COLOR_NB];
+    int               savedAreas[COLOR_NB][Trace::AREA_NB];
+    std::memcpy(savedScores, Trace::scores, sizeof(savedScores));
+    std::memcpy(savedAreas, Trace::mobility_area_counts, sizeof(savedAreas));
+
+    std::memset(Trace::scores, 0, sizeof(Trace::scores));
+    std::memset(Trace::mobility_area_counts, 0, sizeof(Trace::mobility_area_counts));
+
+    TermSnapshot snap;
+    snap.v = Evaluation<Trace::TRACE>(pos).value();
+    std::memcpy(snap.s, Trace::scores, sizeof(snap.s));
+
+    std::memcpy(Trace::scores, savedScores, sizeof(savedScores));
+    std::memcpy(Trace::mobility_area_counts, savedAreas, sizeof(savedAreas));
+    return snap;
+}
+// [SC:trace] end
 }  // namespace Alexander

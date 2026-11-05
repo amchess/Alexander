@@ -17,7 +17,7 @@ std::string generate_general_info(Position&          pos,
                                   uint8_t            winProb,
                                   const std::string& shashinZone,
                                   const std::string& gamePhase);
-std::string generate_main_table();
+std::string generate_main_table(const Position& pos);
 
 }  // namespace Eval
 

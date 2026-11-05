@@ -18,37 +18,37 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     Trace::Helpers::append_term_row(ss, pos, phase, "Space", SPACE);
     ss << "=== SPACE SUBELEMENTS ===\n";
 
-    // DETTAGLIO SPAZIO PER AREE
+    // SPACE DETAIL BY AREA
     ss << "Space Detail by Area:\n";
 
-    // Definiamo le maschere per le aree
+    // Masks of the areas
     const Bitboard QueenSideFiles = FileABB | FileBBB | FileCBB;  // a-c
     const Bitboard CenterFiles    = FileDBB | FileEBB;            // d-e
     const Bitboard KingSideFiles  = FileFBB | FileGBB | FileHBB;  // f-h
 
-    // Funzione per calcolare gli attacchi dei pedoni per un colore
+    // Pawn attacks of a colour
     auto pawn_attacks_bb = [](Color c, Bitboard pawns) {
         return c == WHITE ? (shift<NORTH_WEST>(pawns) | shift<NORTH_EAST>(pawns))
                           : (shift<SOUTH_WEST>(pawns) | shift<SOUTH_EAST>(pawns));
     };
 
-    // Funzione per calcolare lo spazio per un colore in una data maschera di file
+    // Space of a colour within a mask of files
     auto calculate_space_for_area = [&](Color us, Bitboard area_mask) {
         Color them = ~us;
 
-        // Determina le ranghe in base al colore
+        // Ranks depend on the colour
         Bitboard rank_mask =
           (us == WHITE) ? (Rank2BB | Rank3BB | Rank4BB) : (Rank5BB | Rank6BB | Rank7BB);
         Bitboard space_mask = area_mask & rank_mask;
 
-        // Calcola gli attacchi dei pedoni avversari
+        // Enemy pawn attacks
         Bitboard their_pawns        = pos.pieces(them, PAWN);
         Bitboard their_pawn_attacks = pawn_attacks_bb(them, their_pawns);
 
-        // Case sicure: nella maschera, non occupate da nostri pedoni e non attaccate da pedoni avversari
+        // Safe squares: in the mask, not occupied by our pawns and not attacked by enemy pawns
         Bitboard safe = space_mask & ~pos.pieces(us, PAWN) & ~their_pawn_attacks;
 
-        // Case dietro i pedoni: fino a tre case dietro i pedoni amici
+        // Squares behind the pawns: up to three squares behind the friendly pawns
         Bitboard behind = pos.pieces(us, PAWN);
         if (us == WHITE)
         {
@@ -61,13 +61,13 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
             behind |= shift<NORTH>(shift<NORTH>(behind));
         }
 
-        // Bonus: case sicure + case sicure dietro i pedoni non attaccate da pedoni avversari
+        // Bonus: safe squares + safe squares behind the pawns not attacked by enemy pawns
         int bonus = popcount(safe) + popcount(behind & safe & ~their_pawn_attacks);
 
         return bonus;
     };
 
-    // Calcoliamo per ogni area e per ogni colore
+    // Compute it for every area and every colour
     int white_queen_side = calculate_space_for_area(WHITE, QueenSideFiles);
     int white_center     = calculate_space_for_area(WHITE, CenterFiles);
     int white_king_side  = calculate_space_for_area(WHITE, KingSideFiles);
@@ -75,12 +75,12 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     int black_center     = calculate_space_for_area(BLACK, CenterFiles);
     int black_king_side  = calculate_space_for_area(BLACK, KingSideFiles);
 
-    // Calcola le differenze
+    // Differences
     int queen_side_diff = white_queen_side - black_queen_side;
     int center_diff     = white_center - black_center;
     int king_side_diff  = white_king_side - black_king_side;
 
-    // Mostra in formato tabellare
+    // Table format
     ss << "                        Queen side   Center   King side\n";
     ss << "White                      " << std::setw(3) << white_queen_side << "         "
        << std::setw(3) << white_center << "        " << std::setw(3) << white_king_side << "\n";
@@ -89,21 +89,21 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     ss << "Difference White-Black     " << std::setw(3) << queen_side_diff << "         "
        << std::setw(3) << center_diff << "        " << std::setw(3) << king_side_diff << "\n";
 
-    // Calcoliamo anche il totale per ogni colore
+    // Total of each colour as well
     int white_total_space = white_queen_side + white_center + white_king_side;
     int black_total_space = black_queen_side + black_center + black_king_side;
     ss << "Total Space: White " << white_total_space << " - Black " << black_total_space << "\n";
 
-    // Raccomandazioni strategiche basate sul controllo dello spazio
+    // Strategic recommendations based on the control of space
     ss << "Space Recommendations:\n";
 
-    // Determina il colore con vantaggio e l'area di forza
+    // Side with the advantage and its strongest area
     int total_diff = white_total_space - black_total_space;
     if (total_diff > 0)
     {
-        // Bianco ha vantaggio
+        // White has the advantage
         ss << "White has a space advantage and must increase it on the ";
-        // Trova l'area di massimo vantaggio per il Bianco
+        // Area of largest advantage for White
         if (queen_side_diff >= center_diff && queen_side_diff >= king_side_diff)
         {
             ss << "queen side";
@@ -119,9 +119,9 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     }
     else if (total_diff < 0)
     {
-        // Nero ha vantaggio
+        // Black has the advantage
         ss << "Black has a space advantage and must increase it on the ";
-        // Trova l'area di massimo vantaggio per il Nero (valori negativi più piccoli)
+        // Area of largest advantage for Black (smallest negative values)
         if (queen_side_diff <= center_diff && queen_side_diff <= king_side_diff)
         {
             ss << "queen side";
@@ -141,11 +141,11 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     }
     ss << "\n";
 
-    // EXPANSION FACTOR (Shashin Theory) - mantenuto invariato
+    // EXPANSION FACTOR (Shashin Theory) - kept unchanged
     ss << "Expansion Factor (Shashin Theory):\n";
     ss << "===================================\n";
 
-    // Funzione per calcolare il centro di gravità per un colore
+    // Center of gravity of a colour
     auto calculate_center_of_gravity = [&](Color color) -> double {
         Bitboard pieces      = pos.pieces(color);
         double   sum         = 0.0;
@@ -156,8 +156,8 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
             Square s    = pop_lsb(pieces);
             Rank   rank = rank_of(s);
 
-            // Per il bianco: rank1 = 1, rank2 = 2, ... rank8 = 8
-            // Per il nero: rank8 = 1, rank7 = 2, ... rank1 = 8
+            // For White: rank1 = 1, rank2 = 2, ... rank8 = 8
+            // For Black: rank8 = 1, rank7 = 2, ... rank1 = 8
             double rank_value = (color == WHITE) ? (rank + 1) : (8 - rank);
 
             sum += rank_value;
@@ -167,12 +167,12 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
         return piece_count > 0 ? sum / piece_count : 0.0;
     };
 
-    // Calcola i centri di gravità
+    // Centers of gravity
     double white_gravity   = calculate_center_of_gravity(WHITE);
     double black_gravity   = calculate_center_of_gravity(BLACK);
     double delta_expansion = white_gravity - black_gravity;
 
-    // Mostra i risultati
+    // Show the results
     ss << "White Center of Gravity: " << std::fixed << std::setprecision(2) << white_gravity
        << "\n";
     ss << "Black Center of Gravity: " << std::fixed << std::setprecision(2) << black_gravity
@@ -180,7 +180,7 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
     ss << "Delta Expansion (White-Black): " << std::fixed << std::setprecision(2) << delta_expansion
        << "\n";
 
-    // Solo per posizioni di tipo Capablanca (win probability ~50%)
+    // Only for Capablanca-type positions (win probability ~50%)
     if (winProb >= 45 && winProb <= 55)
     {
         ss << "Capablanca Expansion Recommendations:\n";
@@ -211,6 +211,50 @@ std::string analyze_space(const Position& pos, int phase, uint8_t winProb) {
         ss << "- Restrict opponent's piece mobility\n";
         ss << "- Create weaknesses in opponent's camp\n";
     }
+    ss << "\n";
+
+    // =========================================================================
+    // [SC:trace] BLOCK 2: ADVANCED SPACE MODULES
+    // =========================================================================
+    ss << "================================================================\n";
+    ss << "=== ADVANCED SPACE MODULES ===\n\n";
+    Trace::Helpers::append_score_block(
+      ss, pos, "Territorial Control Evaluation (Pawn advancement & Central footprint)", SPACE);
+
+    const int netSpace = UCIEngine::to_cp(mg_value(scores[SPACE][WHITE] - scores[SPACE][BLACK]), pos);
+    const bool crampedW = pos.count<ALL_PIECES>(WHITE) > 10 && netSpace < -8;
+    const bool crampedB = pos.count<ALL_PIECES>(BLACK) > 10 && netSpace > 8;
+
+    ss << "Territorial Diagnostic:\n";
+    if (netSpace > 8)
+        ss << "  - White holds a clear space advantage (+" << netSpace
+           << " cp). Black's pieces have fewer safe squares behind the pawn chain.\n\n";
+    else if (netSpace < -8)
+        ss << "  - Black holds a clear space advantage (+" << -netSpace
+           << " cp). White's pieces have fewer safe squares behind the pawn chain.\n\n";
+    else
+        ss << "  - Space and territorial control are roughly equal. Neither side is critically "
+              "cramped.\n\n";
+
+    ss << "--- OTB STRATEGIC SYNTHESIS ---\n";
+    ss << "  * Theory : Space matters in proportion to the pieces on the board: the side with more "
+          "space wants to keep pieces, the cramped side needs exchanges and a liberating pawn "
+          "break.\n";
+    ss << "  * Action : ";
+    if (crampedB)
+        ss << "Black is cramped: trade minor pieces and prepare a freeing break (...c5/...e5/...f5 "
+              "type) before White builds up. White should avoid trades and prevent the break.\n";
+    else if (crampedW)
+        ss << "White is cramped: trade minor pieces and prepare a freeing break (c4/e4/f4 "
+              "type) before Black builds up. Black should avoid trades and prevent the break.\n";
+    else if (netSpace > 8)
+        ss << "White should use the extra space to transfer pieces to the wing of attack faster "
+              "than Black can defend it.\n";
+    else if (netSpace < -8)
+        ss << "Black should use the extra space to transfer pieces to the wing of attack faster "
+              "than White can defend it.\n";
+    else
+        ss << "Fight for the central squares with pieces before committing the pawns.\n";
     ss << "\n";
 
     return ss.str();

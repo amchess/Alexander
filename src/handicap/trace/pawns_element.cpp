@@ -32,7 +32,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
         return result.empty() ? "none" : result;
     };
 
-    // a. ISOLE PEDONALI
+    // a. PAWN ISLANDS
     auto find_pawn_islands = [&](Color color) -> std::vector<Bitboard> {
         Bitboard          pawns = pos.pieces(color, PAWN);
         std::vector<bool> files_with_pawns(8, false);
@@ -75,7 +75,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
         ss << "  Island " << (i + 1) << ": " << bitboard_to_squares(black_islands[i]) << "\n";
     }
 
-    // b. PEDONI IMPEDONATI (DOUBLED PAWNS)
+    // b. DOUBLED PAWNS
     auto find_doubled_pawns = [&](Color color) -> Bitboard {
         Bitboard pawns   = pos.pieces(color, PAWN);
         Bitboard doubled = 0;
@@ -97,7 +97,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_doubled) << "\n";
     ss << "Black: " << bitboard_to_squares(black_doubled) << "\n";
 
-    // c. PEDONI ISOLATI
+    // c. ISOLATED PAWNS
     auto find_isolated_pawns = [&](Color color) -> Bitboard {
         Bitboard pawns    = pos.pieces(color, PAWN);
         Bitboard isolated = 0;
@@ -128,7 +128,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_isolated) << "\n";
     ss << "Black: " << bitboard_to_squares(black_isolated) << "\n";
 
-    // d. PEDONI ARRETRATI (BACKWARD PAWNS) - DEFINIZIONE COMPLETA (senza warning)
+    // d. BACKWARD PAWNS - COMPLETE DEFINITION (without warnings)
     auto find_backward_pawns = [&](Color color) -> Bitboard {
         Color     Them = ~color;
         Direction Up   = pawn_push(color);
@@ -137,28 +137,28 @@ std::string analyze_pawns(const Position& pos, int phase) {
         Bitboard theirPawns    = pos.pieces(Them, PAWN);
         Bitboard backwardPawns = 0;
 
-        // Per ogni pedone
+        // For every pawn
         Bitboard pawnsCopy = ourPawns;
         while (pawnsCopy)
         {
             Square s = pop_lsb(pawnsCopy);
             File   f = file_of(s);
 
-            // CONDIZIONE 1: Mancanza di protezione da pedoni amici
+            // CONDITION 1: no protection by friendly pawns
             Bitboard neighbours           = ourPawns & adjacent_files_bb(s);
             bool     hasForwardNeighbours = neighbours & forward_ranks_bb(Them, s + Up);
 
-            // Condizione semplificata: nessun pedone amico che possa proteggerlo avanzando
-            // (i pedoni sulle colonne adiacenti sono avanzati oltre o assenti)
+            // Simplified condition: no friendly pawn can protect it by advancing
+            // (the pawns on the adjacent files are further advanced or missing)
             bool lacksProtection = !hasForwardNeighbours;
 
-            // CONDIZIONE 2: Vulnerabilità su colonna (semi-)aperta
-            bool isSemiOpen = true;  // colonna semi-aperta (nessun pedone amico davanti)
+            // CONDITION 2: vulnerability on a (half-)open file
+            bool isSemiOpen = true;  // half-open file (no friendly pawn in front)
 
-            // Controlla la colonna del pedone
+            // Check the file of the pawn
             Bitboard sameFilePawns = ourPawns & file_bb(f);
 
-            // Per colonna semi-aperta: nessun pedone amico davanti
+            // Half-open file: no friendly pawn in front
             if (color == WHITE)
             {
                 Bitboard aheadMask = forward_ranks_bb(WHITE, s);
@@ -176,13 +176,13 @@ std::string analyze_pawns(const Position& pos, int phase) {
                 }
             }
 
-            // È su colonna (semi-)aperta
+            // It is on a (half-)open file
             bool onOpenOrSemiOpen = isSemiOpen;
 
-            // CONDIZIONE AGGIUNTIVA: vulnerabilità al blocco/attacco
+            // ADDITIONAL CONDITION: vulnerable to blockade/attack
             bool blocked = (pos.piece_on(s + Up) == make_piece(Them, PAWN));
 
-            // Calcola leverPush (attacco avversario alla casa davanti)
+            // leverPush (enemy pawn attack on the square in front)
             Bitboard leverPush = 0;
             if (color == WHITE)
             {
@@ -195,13 +195,13 @@ std::string analyze_pawns(const Position& pos, int phase) {
 
             bool vulnerable = blocked || leverPush;
 
-            // DEFINIZIONE COMPLETA: Pedone arretrato se:
-            // 1. Mancano pedoni amici che possano proteggerlo (sono avanzati oltre o assenti)
-            // 2. È su colonna semi-aperta o aperta
-            // 3. È vulnerabile (bloccato o minacciato)
+            // COMPLETE DEFINITION: a pawn is backward if:
+            // 1. No friendly pawn can protect it (they are further advanced or missing)
+            // 2. It is on a half-open or open file
+            // 3. It is vulnerable (blocked or threatened)
             bool isBackward = lacksProtection && onOpenOrSemiOpen && vulnerable;
 
-            // Escludi i pedoni passati
+            // Exclude the passed pawns
             if (isBackward)
             {
                 Bitboard stoppers = theirPawns & passed_pawn_span(color, s);
@@ -233,7 +233,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_backward) << "\n";
     ss << "Black: " << bitboard_to_squares(black_backward) << "\n";
 
-    // e. PEDONI SOSPESI (HANGING PAWNS) - DEFINIZIONE CORRETTA E CENTRALE
+    // e. HANGING PAWNS - CORRECT, CENTRAL DEFINITION
     auto find_hanging_pawns = [&](Color color) -> Bitboard {
         Bitboard pawns   = pos.pieces(color, PAWN);
         Bitboard hanging = 0;
@@ -245,26 +245,26 @@ std::string analyze_pawns(const Position& pos, int phase) {
             File   f = file_of(s);
             Rank   r = rank_of(s);
 
-            // 1. Devono essere pedoni CENTRALi o semi-centrali (colonne c, d, e).
-            // Se f è FILE_C, la coppia sarà c+d. Se è FILE_D, sarà d+e.
+            // 1. They must be central or semi-central pawns (files c, d, e).
+            // If f is FILE_C the pair is c+d; if it is FILE_D, d+e.
             if (f >= FILE_C && f <= FILE_E)
             {
-                // 2. Devono essere avanzati (non sulle traverse di partenza)
+                // 2. They must be advanced (not on their starting ranks)
                 bool is_advanced = (color == WHITE) ? (r >= RANK_3) : (r <= RANK_6);
 
-                // 3. Controlliamo che ci sia il compagno esattamente a destra
+                // 3. The partner must be exactly on the right
                 if (is_advanced && (pawns & square_bb(Square(s + 1))))
                 {
-                    // Abbiamo una Phalanx centrale. Ora controlliamo le colonne esterne.
-                    // Dato che f è tra C ed E, i limiti esterni sono sempre validi (B e F/G)
+                    // A central phalanx: now check the outer files.
+                    // Since f is between C and E, the outer limits are always valid (B and F/G)
                     File left_outer = File(f - 1);
                     File right_outer =
-                      File(f + 2);  // f+1 è l'altro pedone, f+2 è la colonna esterna destra
+                      File(f + 2);  // f+1 is the other pawn, f+2 the outer file on the right
 
                     bool has_left_outer_pawn  = pawns & file_bb(left_outer);
                     bool has_right_outer_pawn = pawns & file_bb(right_outer);
 
-                    // Se non ci sono alleati sulle colonne esterne, sono veri "Hanging Pawns" centrali
+                    // Without friendly pawns on the outer files they are true central hanging pawns
                     if (!has_left_outer_pawn && !has_right_outer_pawn)
                     {
                         hanging |= square_bb(s) | square_bb(Square(s + 1));
@@ -281,12 +281,12 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_hanging) << "\n";
     ss << "Black: " << bitboard_to_squares(black_hanging) << "\n";
 
-    // Funzione per contare le coppie di hanging pawns
+    // Counts the pairs of hanging pawns
     auto count_hanging_pairs = [&](Color color) -> int {
         Bitboard hanging = find_hanging_pawns(color);
         int      pairs   = 0;
 
-        // Controlla tutte le coppie di colonne adiacenti
+        // Check all the pairs of adjacent files
         for (int i = FILE_A; i <= FILE_G; i++)
         {
             File f      = File(i);
@@ -298,7 +298,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
             if (pawns_on_f && pawns_on_next)
             {
                 pairs++;
-                i++;  // Salta la prossima colonna
+                i++;  // Skip the next file
             }
         }
         return pairs;
@@ -308,27 +308,27 @@ std::string analyze_pawns(const Position& pos, int phase) {
     int black_pairs = count_hanging_pairs(BLACK);
     ss << "Hanging pawn pairs: White " << white_pairs << ", Black " << black_pairs << "\n";
 
-    // f. CASE DEBOLI (WEAK SQUARES)
+    // f. WEAK SQUARES
     auto find_weak_squares = [&](Color color) -> Bitboard {
         Color    opponent    = ~color;
         Bitboard our_pawns   = pos.pieces(color, PAWN);
         Bitboard their_pawns = pos.pieces(opponent, PAWN);
 
-        // Calcola gli attacchi dei pedoni
+        // Pawn attacks
         Bitboard their_pawn_attacks = (opponent == WHITE) ? pawn_attacks_bb<WHITE>(their_pawns)
                                                           : pawn_attacks_bb<BLACK>(their_pawns);
 
         Bitboard our_pawn_attacks =
           (color == WHITE) ? pawn_attacks_bb<WHITE>(our_pawns) : pawn_attacks_bb<BLACK>(our_pawns);
 
-        // Le case deboli sono quelle che non sono difese da pedoni amici
+        // Weak squares are those not defended by friendly pawns
         Bitboard undefended_by_pawns = ~our_pawn_attacks;
         Bitboard potential_weak      = undefended_by_pawns & ~our_pawns;
 
-        // Considera deboli le case nella metà campo avversario che sono attaccated
+        // Squares in the opponent's half that are attacked count as weak
         Bitboard weak_candidates = potential_weak & their_pawn_attacks;
 
-        // Aggiungi le case nelle prime 3 file del colore che sono indifese
+        // Add the undefended squares on the first 3 ranks of the colour
         Bitboard home_territory =
           (color == WHITE) ? (Rank1BB | Rank2BB | Rank3BB) : (Rank8BB | Rank7BB | Rank6BB);
         weak_candidates |= potential_weak & home_territory;
@@ -342,7 +342,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
     ss << "White: " << bitboard_to_squares(white_weak) << "\n";
     ss << "Black: " << bitboard_to_squares(black_weak) << "\n";
 
-    // RIASSUNTO STRUTTURALE
+    // STRUCTURAL SUMMARY
     ss << "\nPawn Structure Summary:\n";
     ss << "=======================\n";
     ss << "White pawn weaknesses: "
@@ -359,11 +359,11 @@ std::string analyze_pawns(const Position& pos, int phase) {
        << ", Backward: " << popcount(black_backward) << ", Hanging: " << popcount(black_hanging)
        << ")\n";
 
-    // CENTER TYPE ANALYSIS (Basata sulla classificazione sistematica del PDF)
+    // CENTER TYPE ANALYSIS (based on the systematic classification of the PDF)
     ss << "Center Type Analysis:\n";
     ss << "=====================\n";
 
-    // Definizione precisa dei tipi di centro basata sul PDF
+    // Precise definition of the center types, based on the PDF
     auto analyze_center_type = [&]() -> std::string {
         Square d4_center = SQ_D4, e4_center = SQ_E4, d5_center = SQ_D5, e5_center = SQ_E5;
         Square d3 = SQ_D3, e3 = SQ_E3, c3 = SQ_C3, f3 = SQ_F3;
@@ -389,36 +389,36 @@ std::string analyze_pawns(const Position& pos, int phase) {
         bool b_c6 = pos.piece_on(c6) == b_pawn;
         bool b_f6 = pos.piece_on(f6) == b_pawn;
 
-        // Conta i pedoni centrali per colore
+        // Count the central pawns of each colour
         int white_center_count = (w_d4 ? 1 : 0) + (w_e4 ? 1 : 0) + (w_d5 ? 1 : 0) + (w_e5 ? 1 : 0);
         int black_center_count = (b_d4 ? 1 : 0) + (b_e4 ? 1 : 0) + (b_d5 ? 1 : 0) + (b_e5 ? 1 : 0);
 
-        // 1. Centro APERTO: nessun pedone sulle 4 case centrali
+        // 1. OPEN center: no pawn on the 4 central squares
         if (white_center_count == 0 && black_center_count == 0)
         {
             return "Open Center";
         }
 
-        // 2. Centro CHIUSO: catene di pedoni bloccate al centro SENZA tensione
+        // 2. CLOSED center: pawn chains blocked in the center WITHOUT tension
         Bitboard w_center_pawns = pos.pieces(WHITE, PAWN) & (FileDBB | FileEBB);
         Bitboard b_center_pawns = pos.pieces(BLACK, PAWN) & (FileDBB | FileEBB);
 
         Bitboard w_center_attacks = pawn_attacks_bb<WHITE>(w_center_pawns);
         Bitboard b_center_attacks = pawn_attacks_bb<BLACK>(b_center_pawns);
 
-        // C'è tensione se i pedoni centrali possono catturarsi a vicenda
+        // There is tension if the central pawns can capture each other
         bool central_tension =
           (w_center_attacks & b_center_pawns) || (b_center_attacks & w_center_pawns);
 
         bool closed_center = false;
 
-        // Se c'è tensione, NON è un centro chiuso.
+        // With tension it is NOT a closed center.
         if (!central_tension)
         {
-            // Verifichiamo la presenza di almeno un blocco frontale
+            // Check that there is at least one frontal blockade
             if ((w_d4 && b_d5) || (w_e4 && b_e5) || (w_d5 && b_d6) || (w_e5 && b_e6))
             {
-                // Un vero centro chiuso richiede pedoni su entrambe le colonne centrali per entrambi i colori
+                // A true closed center needs pawns of both colours on both central files
                 if ((w_center_pawns & file_bb(FILE_D)) && (w_center_pawns & file_bb(FILE_E))
                     && (b_center_pawns & file_bb(FILE_D)) && (b_center_pawns & file_bb(FILE_E)))
                 {
@@ -429,12 +429,12 @@ std::string analyze_pawns(const Position& pos, int phase) {
 
         if (closed_center)
         {
-            // Struttura Francese: Bianco: d4, e5 vs Nero: d5, e6
+            // French structure: White d4, e5 vs Black d5, e6
             if ((w_d4 && w_e5 && b_d5 && b_e6) || (b_d4 && b_e5 && w_d5 && w_e3))
             {
                 return "Closed Center (French Chain)";
             }
-            // Struttura Est-Indiana: Bianco: e4, d5 vs Nero: e5, d6
+            // King's Indian structure: White e4, d5 vs Black e5, d6
             if ((w_e4 && w_d5 && b_e5 && b_d6) || (b_e4 && b_d5 && w_e5 && w_d3))
             {
                 return "Closed Center (King's Indian Chain)";
@@ -442,13 +442,13 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Closed Center";
         }
 
-        // 3. Centro STATICO: una coppia di pedoni centrali bloccati (d4-d5 o e4-e5) senza
-        //    tensione immediata: nessun pedone, sulle colonne vicine alla coppia, che la attacchi
-        //    gia' (c4/e4, c5/e5 per d4-d5; d4/f4, d5/f5 per e4-e5) o possa attaccarla con un passo
+        // 3. STATIC center: a pair of blocked central pawns (d4-d5 or e4-e5) without
+        //    immediate tension: no pawn, on the files next to the pair, that attacks it
+        //    already (c4/e4, c5/e5 for d4-d5; d4/f4, d5/f5 for e4-e5) or can attack it in one step
         //    (c3/e3, c6/e6; d3/f3, d6/f6).
-        //    Prima il controllo guardava tutti i pedoni bianchi in 3a/4a traversa e tutti i neri
-        //    in 5a/6a, compresa la coppia stessa: d4 (e4) e' in 4a traversa, quindi il centro
-        //    statico non usciva mai.
+        //    The previous check looked at all the white pawns on ranks 3/4 and all the black ones
+        //    on ranks 5/6, the pair included: d4 (e4) is on rank 4, so the static center
+        //    was never detected.
         auto no_immediate_tension = [&](Bitboard pairNeighbourFiles) -> bool {
             return !(pos.pieces(WHITE, PAWN) & pairNeighbourFiles & (Rank3BB | Rank4BB))
                 && !(pos.pieces(BLACK, PAWN) & pairNeighbourFiles & (Rank6BB | Rank5BB));
@@ -466,7 +466,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Static Center (e4-e5)";
         }
 
-        // 4. Centro MOBILE: un pedone centrale sostenuto da un altro
+        // 4. MOBILE center: a central pawn supported by another one
         if ((w_d4 && (w_e3 || w_c3)) || (w_e4 && (w_d3 || w_f3)))
         {
             return "Mobile Center";
@@ -476,17 +476,17 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Mobile Center";
         }
 
-        // 5. Centro DINAMICO: presenza di IQP o Pedoni Sospesi
+        // 5. DYNAMIC center: an IQP or hanging pawns
 
         Bitboard w_pawns = pos.pieces(WHITE, PAWN);
         Bitboard b_pawns = pos.pieces(BLACK, PAWN);
 
-        // Verifica IQP (Pedone di Donna Isolato)
-        // Definizione blindata con maschere assolute Bitboard:
-        // 1. Il pedone amico deve essere in d4 (Bianco) o d5 (Nero).
-        // 2. Deve essere l'UNICO pedone amico sulla colonna D.
-        // 3. NON ci devono essere pedoni amici sulle colonne C ed E.
-        // 4. NON ci devono essere pedoni avversari sulla colonna D (la colonna deve essere semi-aperta).
+        // IQP check (isolated queen pawn)
+        // Strict definition with absolute bitboard masks:
+        // 1. The friendly pawn must be on d4 (White) or d5 (Black).
+        // 2. It must be the ONLY friendly pawn on the d-file.
+        // 3. There must be NO friendly pawns on the c- and e-files.
+        // 4. There must be NO enemy pawns on the d-file (the file must be half-open).
 
         bool w_has_iqp = w_d4 && (popcount(w_pawns & FileDBB) == 1)
                       && !(w_pawns & (FileCBB | FileEBB)) && !(b_pawns & FileDBB);
@@ -499,26 +499,26 @@ std::string analyze_pawns(const Position& pos, int phase) {
             return "Dynamic Center (Isolated Queen's Pawn)";
         }
 
-        // Verifica pedoni sospesi richiamando la funzione corretta definita sopra
+        // Hanging pawns, using the function defined above
         if (find_hanging_pawns(WHITE) || find_hanging_pawns(BLACK))
         {
             return "Dynamic Center (Hanging Pawns)";
         }
 
-        // Verifica pedoni sospesi richiamando la funzione corretta definita sopra
+        // Hanging pawns, using the function defined above
         if (find_hanging_pawns(WHITE) || find_hanging_pawns(BLACK))
         {
             return "Dynamic Center (Hanging Pawns)";
         }
 
-        // Se nessuno dei casi sopra, restituisce "Dynamic Center" generico
+        // If none of the cases above applies, return the generic "Dynamic Center"
         return "Dynamic Center";
     };
 
     std::string center_type = analyze_center_type();
     ss << "Center Type: " << center_type << "\n";
 
-    // Spiegazione del tipo di centro
+    // Explanation of the center type
     ss << "\nCenter Characteristics:\n";
     if (center_type == "Open Center")
     {
@@ -563,7 +563,7 @@ std::string analyze_pawns(const Position& pos, int phase) {
         }
     }
 
-    // Dettaglio dei pedoni centrali
+    // Detail of the central pawns
     ss << "\nCentral Pawns (d4, e4, d5, e5):\n";
     Bitboard central_squares = (FileDBB | FileEBB) & (Rank4BB | Rank5BB);
     Bitboard central_white   = pos.pieces(WHITE, PAWN) & central_squares;
@@ -629,6 +629,89 @@ std::string analyze_pawns(const Position& pos, int phase) {
         }
     }
 
+    ss << "\n";
+
+    // =========================================================================
+    // [SC:trace] BLOCK 2: ADVANCED PAWN STRUCTURE MODULES
+    // =========================================================================
+    ss << "================================================================\n";
+    ss << "=== ADVANCED PAWN STRUCTURE MODULES ===\n\n";
+    Trace::Helpers::append_score_block(ss, pos, "Pawn Structure Engine Evaluation", PAWN);
+
+    auto weakness_count = [&](Color c) {
+        return popcount(c == WHITE ? white_doubled : black_doubled)
+             + popcount(c == WHITE ? white_isolated : black_isolated)
+             + popcount(c == WHITE ? white_backward : black_backward)
+             + (c == WHITE ? white_pairs : black_pairs);
+    };
+    const int wWeak = weakness_count(WHITE), bWeak = weakness_count(BLACK);
+    const int wIsl = int(white_islands.size()), bIsl = int(black_islands.size());
+
+    // Targets: weak pawns of a side that sit on a file not covered by its own pawns from behind,
+    // i.e. pawns the opponent's heavy pieces can attack frontally
+    auto frontal_targets = [&](Color c) {
+        Bitboard weak    = (c == WHITE ? white_isolated | white_backward
+                                       : black_isolated | black_backward);
+        Bitboard targets = 0;
+        while (weak)
+        {
+            Square s = pop_lsb(weak);
+            if (!(pos.pieces(~c, PAWN) & file_bb(file_of(s))))
+                targets |= s;
+        }
+        return targets;
+    };
+    const Bitboard wTargets = frontal_targets(WHITE), bTargets = frontal_targets(BLACK);
+
+    ss << "Structural Balance Sheet:\n";
+    ss << "  - Pawn islands      : White " << wIsl << ", Black " << bIsl << "\n";
+    ss << "  - Weaknesses        : White " << wWeak << ", Black " << bWeak
+       << " (doubled + isolated + backward + hanging pairs)\n";
+    ss << "  - Frontal targets   : White pawns " << Trace::Helpers::bitboard_to_squares(wTargets)
+       << "| Black pawns " << Trace::Helpers::bitboard_to_squares(bTargets) << "\n";
+    ss << "  - Holes (weak squares in the own camp, ranks 1-4 for White / 5-8 for Black):\n"
+       << "      White camp: "
+       << Trace::Helpers::bitboard_to_squares(white_weak & (Rank1BB | Rank2BB | Rank3BB | Rank4BB))
+       << "\n      Black camp: "
+       << Trace::Helpers::bitboard_to_squares(black_weak & (Rank5BB | Rank6BB | Rank7BB | Rank8BB))
+       << "\n\n";
+
+    ss << "--- OTB STRATEGIC SYNTHESIS ---\n";
+    const int netPawnMg = mg_value(scores[PAWN][WHITE] - scores[PAWN][BLACK]);
+    if (center_type.find("Dynamic") != std::string::npos)
+        ss << "  * Theory : Dynamic centers (IQP, hanging pawns) trade structural weaknesses for "
+              "space and piece activity: their owner must act before the endgame arrives.\n";
+    else if (center_type.find("Closed") != std::string::npos)
+        ss << "  * Theory : With a closed center the play moves to the wings: attack on the side "
+              "where your pawn chain points, with pawn breaks against the base of the enemy chain.\n";
+    else if (wWeak + bWeak > 0)
+        ss << "  * Theory : Static pawn weaknesses are permanent: they become decisive when the "
+              "pieces that defend them are traded, so the side with the better structure welcomes "
+              "simplifications.\n";
+    else
+        ss << "  * Theory : Healthy structures on both sides: the game will be decided by piece "
+              "activity and by who first creates a weakness with a well prepared pawn break.\n";
+
+    ss << "  * Action : ";
+    if (wWeak > bWeak && wTargets)
+        ss << "Black should blockade and pile up on the weak White pawns ("
+           << Trace::Helpers::bitboard_to_squares(wTargets)
+           << ") with rooks on the half-open files; White must keep pieces active to defend them "
+              "dynamically and avoid passive trades.\n";
+    else if (bWeak > wWeak && bTargets)
+        ss << "White should blockade and pile up on the weak Black pawns ("
+           << Trace::Helpers::bitboard_to_squares(bTargets)
+           << ") with rooks on the half-open files; Black must keep pieces active to defend them "
+              "dynamically and avoid passive trades.\n";
+    else if (netPawnMg > 10)
+        ss << "White has the healthier structure: trade pieces (not pawns) and steer towards an "
+              "endgame where the structural edge counts.\n";
+    else if (netPawnMg < -10)
+        ss << "Black has the healthier structure: trade pieces (not pawns) and steer towards an "
+              "endgame where the structural edge counts.\n";
+    else
+        ss << "The structures are equivalent: look for the pawn break that improves your pieces "
+              "(see the candidate pawn breaks in the PLANS section).\n";
     ss << "\n";
 
     return ss.str();

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 #include "legal_moves.h"
+#include "plans.h"
 
 namespace Alexander {
 
@@ -19,7 +20,7 @@ namespace Eval {
 std::string generate_legal_moves_analysis(Position& pos) {
     std::stringstream ss;
     // =============================================
-    // SEZIONE MOSSE LEGALI ORDINATE PER WIN PROBABILITY E SCORE
+    // LEGAL MOVES SORTED BY WIN PROBABILITY AND SCORE
     ss
       << "\nLegal moves sorted by static activity (Win Probability / CentiPawns: Best to Worst):\n";
 
@@ -32,35 +33,36 @@ std::string generate_legal_moves_analysis(Position& pos) {
 
     std::vector<MoveActivity> legalMoves;
 
-    // NON serve più salvare la valutazione corrente separatamente
-    // usiamo direttamente v_white che ci è stato passato come parametro
+    // There is no need to save the current evaluation separately:
+    // v_white, passed as a parameter, is used directly
 
-    // Genera tutte le mosse legali
+    // Generate all the legal moves
     for (const auto& move : MoveList<LEGAL>(pos))
     {
-        // Esegui la mossa
+        // Make the move
         StateInfo st;
         pos.do_move(move, st);
 
-        // ⬇️ USA LA NUOVA FUNZIONE invece di Evaluation<NO_TRACE>
-        // Valuta la posizione risultante
-        Value v_after = Eval::evaluate_position(pos);
+        // [SC:trace] Quiet evaluation (static evaluation + capture-only quiescence search):
+        // with the bare static evaluation every capture looked winning, because the
+        // recapture was never considered (e.g. Bxf6 "+3 pawns" with ...Nxf6 on the board)
+        Value v_after = Eval::quiet_evaluation(pos);
 
-        // Calcola la win probability dal punto di vista del giocatore che muove
+        // Win probability from the point of view of the side that moves
         uint8_t currentWinProbability;
         currentWinProbability = WDLModel::get_win_probability(-v_after, pos);
 
-        // Annulla la mossa
+        // Undo the move
         pos.undo_move(move);
 
-        // Calcola il miglioramento per il giocatore che muove
+        // Improvement for the side that moves
         int currentActivityScore = UCIEngine::to_cp(-v_after, pos);
 
         legalMoves.push_back({move, (int) currentWinProbability, currentActivityScore,
                               UCIEngine::move(move, pos.is_chess960())});
     }
 
-    // ordina per win probability decrescente e, a parità, per activity decrescente
+    // sort by decreasing win probability and, on ties, by decreasing activity
     std::sort(legalMoves.begin(), legalMoves.end(),
               [](const MoveActivity& a, const MoveActivity& b) {
                   if (a.winProbability != b.winProbability)
@@ -68,7 +70,7 @@ std::string generate_legal_moves_analysis(Position& pos) {
                   return a.activityScore > b.activityScore;
               });
 
-    // Stampa le mosse in orizzontale
+    // Print the moves horizontally
     if (legalMoves.empty())
     {
         ss << "No legal moves found.\n";
@@ -86,7 +88,7 @@ std::string generate_legal_moves_analysis(Position& pos) {
         }
         ss << "\n";
 
-        // Evidenzia la mossa migliore
+        // Highlight the best move
         if (!legalMoves.empty())
         {
             const auto& bestMove = legalMoves[0];
