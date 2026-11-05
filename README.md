@@ -574,7 +574,88 @@ of various chess concepts, handcrafted by experts, tested and tuned using fishte
 
 # Trace (eval command) infos
 
+The UCI command `eval` prints the static analysis of the current position. From Alexander 9 the
+output has two parts, in this order:
+
+1. **The Master's Verdict**: the position explained in plain language, for the player
+   (see [The Master's Verdict](#the-masters-verdict)).
+2. **Technical parameters and details**: the data the verdict is built from, after the separator
+
+   ```
+   ################################################################
+   ####            TECHNICAL PARAMETERS AND DETAILS            ####
+   ####   (data behind the verdict above, for deeper study)    ####
+   ################################################################
+   ```
+
+   It is the trace of the previous versions (the modules of the [Metrics Table](#metrics-table),
+   printed unchanged) with new blocks: the advanced modules of each element, the detailed
+   evaluation matrix and the counterfactual analysis (plans). See
+   [Technical parameters and details](#technical-parameters-and-details).
+
+**It is a static analysis.** `eval` does not search. Every value comes from the static (classical)
+evaluation; the "what if" probes (a move, a trade, a pass) are resolved only by a small quiescence
+search (captures that do not lose material, evasions when in check). Tactical blows beyond the
+captures on the board are not seen: the plan of the verdict can differ from the best move found
+by a search (`go`).
+
+**Strength and content.** With `UCI_LimitStrength` (or `LimitStrength_CB`) the engine evaluates
+only what a player of the chosen Elo takes into account (Handicap mode), and the trace shows only
+those terms: pawn structure and passed pawns from 2000 Elo, Winnable (initiative) from 2200,
+material imbalances from 2400. Without the limit every term is evaluated.
+
+**In check.** The analysis is printed in check too: the verdict focuses on the answer to the
+check, and the technical part opens with
+`*** <side> is in check: static values below are indicative only. ***` (the classical evaluation
+is not defined in check). Up to Alexander 8.2 the output in check was the single line
+`Final evaluation: none (in check)`.
+
+**Units and point of view.** Centipawns on the UCI scale (`cp`), from White's point of view unless
+a line says otherwise. The verdict is addressed to the side to move ("you", "your").
+
+## The Master's Verdict
+
+It opens with `>>> COMPLETE HUMAN EVALUATION (The Master's Verdict) <<<` and
+`Seen from <side>'s side: <side> is to move.`, then:
+
+| Section | What it says | How to use it |
+|---------|--------------|---------------|
+| **OVERALL EVALUATION** | Evaluation (White's point of view) and expected score; material; quiet or sharp position; whether the evaluation rests on the activity of the pieces (mobility, king safety, threats) or on structural terms; game phase; most likely result; Shashin's advice and zone. | Choose the character of your play: maneuvering, concrete calculation, defence. |
+| **EVALUATION FACTORS** | The terms in favour of each side (cp) and the prospects in the middlegame against the endgame. | Keep the pieces or simplify. |
+| **URGENT MATTERS** | Check, the opponent's threat (what he would do if you passed), an immediate tactic; otherwise "Nothing urgent". | Deal with it before anything else. |
+| **PIECE EVALUATION** | Your most and least effective piece (its value here against the normal value of its type), the opponent's problem piece and best unit. | Makogonov's principle: improve your worst piece. |
+| **TRADES AND SIMPLIFICATION** | Whether a queen trade helps; the most useful exchange; the exchanges to avoid. | Choose your trades. |
+| **GEOMETRY AND STRUCTURE** | Pawns (weaknesses, passed pawns, tension, breaks), space and files, key squares. | Targets, outposts, the files for the rooks. |
+| **KING SAFETY** | Your king and the enemy king (shield, attacks around them). | Attack or defend first. |
+| **THE PLAN** | The move to play, with the evaluation after it and why; the alternatives; the next steps; prophylaxis (the opponent's most useful idea). | The concrete plan of the next moves. |
+| **IN A NUTSHELL** | The position and the plan in one sentence. | The summary to remember. |
+
+With a forced mate (for or against the side to move) the verdict is short: the evaluation, the plan
+and the summary. With no legal move it says CHECKMATE or STALEMATE.
+
+## Technical parameters and details
+
+| Block | Content |
+|-------|---------|
+| **GENERAL INFORMATION** | As before: final evaluation (cp and win probability), Shashin zone, game phase. |
+| **ADVANCED GENERAL MODULES** | *New*: side to move and its win probability, strategic outlook of the zone, phase advantage (sum of all the terms, middlegame against endgame). |
+| **DETAILED EVALUATION MATRIX (cp)** | *New*: every term for White, for Black and the net advantage, MG and EG, and the raw total. |
+| **Element rows and SUBELEMENTS** | As before (see the [Metrics Table](#metrics-table)): Material, Imbalances, Pawns, Passed, Knights, Bishops, Rooks, Queens, King safety, Threats, Mobility, Space, Winnable. |
+| **ADVANCED ... MODULES** | *New*, after each element: its score per colour (cp), the diagnostics of the element (outposts, open files, blockades, color complexes...), what changes in simplified scenarios (for example after a queen trade) and an **OTB STRATEGIC SYNTHESIS** (Theory / Action). |
+| **KING SAFETY & THREATS SUBELEMENTS** | *New*: king safety (pawn shelter, attackers) and tactical threats (hanging pieces, forks, pins) per colour, their audit and the effect of a queen trade. |
+| **FINAL SUMMARY**, **ADVANCED MAKOGONOV MODULES** | Makogonov ranking, as before; *new*: the direction in which to reroute the worst piece (in the endgame the king too) and the most valuable piece. |
+| **Legal moves sorted by static activity**, **Best move** | As before, but every move is now evaluated with the quiet evaluation (captures resolved): a capture no longer looks winning when the recapture is on the board. |
+| **COUNTERFACTUAL ANALYSIS: PLANS** | *New*: 1. piece values by ablation (what each piece is worth here) and their efficiency; 2. trade advisor; 3. threats (what the opponent would do if the side to move passed); 4. candidate plans (quiet value, gain against passing, why); 4b. two-ply check (after the opponent's best reply); 5. pawn breaks and tension; 6. maneuvers (Makogonov); 7. the opponent's ideas (prophylaxis). |
+
+Also corrected in Alexander 9: the trace never takes the lazy exits of the evaluation (before, in
+unbalanced positions, mobility, king safety, threats and space could be left at zero in the trace).
+
+The formal syntax (EBNF) and the semantics of the classical modules are in
+[doc/AlexanderTraceSpecification.docx](doc/AlexanderTraceSpecification.docx).
+
 ## Metrics Table
+
+The classical modules of the technical part, and what each level of player can take from them:
 
 | Section | Element / Sub-Element | Utility for Beginner (The "What") | Utility for Intermediate (The "Why") | Utility for Advanced (The "How") | Utility for Expert (The "How and Beyond") |
 |---------|----------------------|-----------------------------------|--------------------------------------|----------------------------------|------------------------------------------|
@@ -609,7 +690,21 @@ of various chess concepts, handcrafted by experts, tested and tuned using fishte
 | **13. Expansion Factor** | | | | | |
 | | Center of gravity and Expansion delta | Measures how far your pieces have advanced into enemy territory. The more advanced, the more aggressive you are. | Link expansion to initiative. Whoever has the more advanced "center of gravity" usually dictates the game's pace. | Use this metric in "Capablanca" (strategic) positions to evaluate who is making territorial progress. If behind, consolidate; if ahead, keep pushing. | Evaluate the stability of your center of gravity. Overly advanced pieces without adequate support can become targets and turn into weaknesses. |
 | **14. Ordered Legal Moves** | | | | | |
-| | Complete list and Activity score | The first move in the list is what the engine considers best. | Look at the first 2-3 moves. If their scores are very similar, you have more than one good option. If one move is clearly superior, it's almost certainly best. | Examine the entire list to find interesting "candidate" moves the engine doesn't rank first but might better fit your style or a long-term plan. | Analyze move ordering to understand engine heuristics. A tactical move (capture, check) will always be on top, but a quiet move with a good score is strategically very significant. |
+| | Complete list and Activity score | The first move in the list is the best one for the static evaluation (no search: tactics beyond the captures are not seen). | Look at the first 2-3 moves. If their scores are very similar, you have more than one good option. If one move is clearly superior, it's almost certainly best. | Examine the entire list to find interesting "candidate" moves the engine doesn't rank first but might better fit your style or a long-term plan. | Analyze move ordering to understand engine heuristics. A tactical move (capture, check) will always be on top, but a quiet move with a good score is strategically very significant. |
+
+## Reading the output of eval from a program
+
+- Read the output up to the `readyok` that answers an `isready` sent right after `eval`: the last
+  line depends on the version (from Alexander 9 the counterfactual analysis follows `Best move:`).
+- The verdict is everything before the `TECHNICAL PARAMETERS AND DETAILS` separator: it starts after
+  `>>> COMPLETE HUMAN EVALUATION (The Master's Verdict) <<<` and ends with a line of 64 `=`.
+- The lines of the older trace are printed unchanged. Every block added by Alexander 9 starts with a
+  line of 64 `=` followed by a title `=== ... ===`, and runs up to the next element row
+  (`Name | mg eg total |`), `FINAL SUMMARY` or `Legal moves sorted by static activity`; the
+  counterfactual analysis runs to the end. Besides these, `=== ADVANCED GENERAL MODULES ===` and the
+  evaluation matrix come between `=== GENERAL INFORMATION ===` and the `ELEMENT | MG EG Total` header.
+  A parser written for the older trace can skip all of them.
+- In check the technical part opens with `*** <side> is in check: static values below are indicative only. ***`.
 
 ## What to expect from Syzygybases?
 
