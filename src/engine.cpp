@@ -281,6 +281,11 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
                     return std::nullopt;
                 }));
 
+    options.add("LiveBook Width", Option(1, 1, 20, [](const Option& o) {
+                    Search::set_livebook_width(o);
+                    return std::nullopt;
+                }));
+
     options.add("LiveBook Timeout", Option(5000, 100, 60000, [](const Option& o) {
                     Search::set_livebook_timeout(o);
                     return std::nullopt;

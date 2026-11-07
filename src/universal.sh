@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================================
-#  universal.sh  -  Alexander 9  -  binario UNIVERSAL x86-64 (Linux / GCC)
+#  universal.sh  -  Alexander 9.1  -  binario UNIVERSAL x86-64 (Linux / GCC)
 #  Da lanciare DENTRO la cartella "src" del sorgente.
 #
 #  ARCH=x86-64-universal compila 8 slice
@@ -55,12 +55,12 @@ fi
 [ -f alexander ] || fallita "eseguibile non generato"
 
 strip alexander
-mv alexander Alexander9-universal
+mv alexander Alexander9.1-universal
 
 # --- verifica: il bench deve girare con la slice scelta per questa CPU ----
 CHECKDIR=$(mktemp -d)
-cp Alexander9-universal "$CHECKDIR/"
-if ! (cd "$CHECKDIR" && ./Alexander9-universal bench 16 1 8 >/dev/null 2>&1); then
+cp Alexander9.1-universal "$CHECKDIR/"
+if ! (cd "$CHECKDIR" && ./Alexander9.1-universal bench 16 1 8 >/dev/null 2>&1); then
     rm -rf "$CHECKDIR"
     fallita "il bench dell'eseguibile universale non termina correttamente"
 fi
@@ -70,10 +70,10 @@ echo "[universal] OK: bench eseguito"
 # --- Verifica: stampa la slice selezionata sulla CPU corrente -------------
 echo ""
 echo "[universal] Test di esecuzione (compiler info):"
-./Alexander9-universal compiler
+./Alexander9.1-universal compiler
 
 make clean
 
 echo ""
-echo "[universal] OK: Alexander9-universal"
+echo "[universal] OK: Alexander9.1-universal"
 exit 0

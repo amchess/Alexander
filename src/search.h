@@ -432,6 +432,7 @@ struct ConthistBonus {
 
 #ifdef USE_LIVEBOOK
 void set_livebook_depth(int book_depth);
+void set_livebook_width(int book_width);
 void set_proxy_url(const std::string& proxy_url);
 void set_use_lichess_games(bool lichess_games);
 void set_use_lichess_masters(bool lichess_masters);

@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -200,10 +201,8 @@ bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
 
 // livebook begin
 #ifdef USE_LIVEBOOK
-//livebook depth begin
-int livebook_depth_count = 0;
-int max_book_depth       = 255;
-//livebook depth end
+int    max_book_depth = 255;  // LiveBook Depth (plies)
+size_t livebook_width = 1;    // LiveBook Width
 
 using Livebooks = std::vector<std::unique_ptr<Livebook::BaseLivebook>>;
 Livebooks opening_livebooks, endgame_livebooks;
@@ -225,6 +224,10 @@ bool _proxy_diversity     = false;
 auto contributor = Livebook::ChessDBContributor();
 
 void Search::set_livebook_depth(const int book_depth) { max_book_depth = book_depth; }
+
+void Search::set_livebook_width(const int book_width) {
+    livebook_width = size_t(std::max(book_width, 1));
+}
 
 void Search::set_proxy_url(const std::string& proxy_url) {
     _proxy_url = proxy_url;
@@ -360,6 +363,77 @@ void Search::set_proxy_diversity(const bool proxy_diversity) {
     _proxy_diversity = proxy_diversity;
     update_livebooks();
 }
+
+namespace {
+
+// No live book request if less time is left for it (the minimum of LiveBook Timeout)
+constexpr TimePoint MinLivebookTime = 100;
+
+// The live books are probed on our clock: a request may take at most half of the optimum
+// time for the current move, so that a slow server cannot make us lose on time.
+// 0 = no limit but LiveBook Timeout (no clock: analysis, depth, nodes, ...).
+TimePoint
+livebook_time_budget(const Search::LimitsType& limits, const TimeManagement& tm, const Color us) {
+    if (limits.time[us])
+        return std::max(tm.optimum() / 2, TimePoint(1));
+
+    if (limits.movetime)
+        return std::max(limits.movetime / 2, TimePoint(1));
+
+    return 0;
+}
+
+// A move of the live books that we may play, Move::none() if there is none:
+// - at most 7 units, if the Syzygy tablebases cannot probe the root (as in
+//   Tablebases::rank_root_moves): the best move of the online tablebases;
+// - in the first LiveBook Depth plies: a move of the opening live books, chosen at random
+//   among the best move and the moves equivalent to it (LiveBook Width).
+// The first live book with a move we may play answers.
+Move probe_livebooks(const Position&          pos,
+                     const Search::RootMoves& rootMoves,
+                     const OptionsMap&        options) {
+    const int units   = pos.count<ALL_PIECES>();
+    const int tbLimit = std::min(int(options["SyzygyProbeLimit"]), Tablebases::MaxCardinality);
+
+    const Livebooks* livebooks = nullptr;
+    size_t           width     = 1;
+
+    if (units <= 7)
+    {
+        if (tbLimit < units || pos.can_castle(ANY_CASTLING))
+            livebooks = &endgame_livebooks;
+    }
+    else if (pos.game_ply() < max_book_depth)
+    {
+        livebooks = &opening_livebooks;
+        width     = livebook_width;
+    }
+
+    if (!livebooks)
+        return Move::none();
+
+    for (const auto& livebook : *livebooks)
+    {
+        Livebook::Moves moves = livebook->lookup(pos);
+
+        // Only the legal moves, among the ones of "go searchmoves"
+        moves.erase(std::remove_if(moves.begin(), moves.end(),
+                                   [&](const auto& move) {
+                                       const Move m = UCIEngine::to_move(pos, move.first);
+                                       return !m
+                                           || std::find(rootMoves.begin(), rootMoves.end(), m)
+                                                == rootMoves.end();
+                                   }),
+                    moves.end());
+
+        if (const auto choices = livebook->choices(std::move(moves), width); !choices.empty())
+            return UCIEngine::to_move(pos, Livebook::BaseLivebook::pick(choices));
+    }
+
+    return Move::none();
+}
+
+}  // namespace
 #endif
 // livebook end
 
@@ -521,63 +595,26 @@ void Search::Worker::start_searching() {
                               *std::find(th->worker->rootMoves.begin(), th->worker->rootMoves.end(),
                                          bookMove));
             }
+            else
+                bookMove = Move::none();  // Not playable ("go searchmoves"): search
         }
 
 #ifdef USE_LIVEBOOK
-        if (think && !bookMove)
+        // The time a live book request may take, also the contribution to ChessDB below
+        const TimePoint livebookBudget =
+          livebook_time_budget(limits, main_manager()->tm, rootPos.side_to_move());
+        Livebook::BaseLivebook::set_time_budget(
+          long(std::min<TimePoint>(livebookBudget, std::numeric_limits<long>::max())));
+
+        // The same limits of the CTG/BIN books, but also when pondering (on a ponderhit the
+        // book move is played at once), and only with enough time for an answer
+        if (think && !bookMove
+            && !(limits.infinite || limits.mate || limits.depth || limits.nodes || limits.perft)
+            && (!livebookBudget || livebookBudget >= MinLivebookTime))
         {
-            if (!limits.infinite && !limits.mate)
-            {
-                livebook_depth_count = rootPos.game_ply();
+            bookMove = probe_livebooks(rootPos, rootMoves, options);
 
-                static const Livebooks no_livebooks;
-                const Livebooks*       livebooks = &no_livebooks;
-
-                const std::string& syzygyPath = static_cast<std::string>(options["SyzygyPath"]);
-                int                totalUnits = rootPos.count<ALL_PIECES>();
-
-                if ((totalUnits <= 7)
-                    && (syzygyPath.empty()
-                        || ((!syzygyPath.empty())
-                            && ((int(options["SyzygyProbeLimit"]) < totalUnits)))))
-                {
-                    livebooks = &endgame_livebooks;
-                }
-                else if (livebook_depth_count < max_book_depth)
-                {
-                    livebooks = &opening_livebooks;
-                }
-
-                for (const auto& livebook : *livebooks)
-                {
-                    if (std::vector<std::pair<std::string, Analysis>> output =
-                          livebook->lookup(rootPos);
-                        !output.empty())
-                    {
-                        std::string     uci;
-                        const Analysis* best = nullptr;
-
-                        for (auto& [move, analysis] : output)
-                        {
-                            if (best == nullptr || analysis > *best)
-                            {
-                                best = &analysis;
-                                uci  = move;
-                            }
-                        }
-
-                        if (best != nullptr)
-                        {
-                            bookMove = UCIEngine::to_move(rootPos, uci);
-                            if (bookMove)
-                                livebook_depth_count++;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (bookMove && std::count(rootMoves.begin(), rootMoves.end(), bookMove))
+            if (bookMove)
             {
                 think = false;
                 for (auto&& th : threads)
@@ -587,10 +624,6 @@ void Search::Worker::start_searching() {
                     if (it != rm.end())
                         std::swap(rm[0], *it);
                 }
-            }
-            else
-            {
-                bookMove = Move::none();
             }
         }
 #endif

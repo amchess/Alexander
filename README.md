@@ -250,7 +250,7 @@ Personal API token of a Lichess account. Since March 2026 the Lichess opening ex
 
 #### LiveBook Timeout
 _Integer, Default: 5000, Min: 100, Max: 60000_  
-Maximum duration in milliseconds of a live book or online tablebase request (the lookup is done on the engine's clock). After a network or server error the live book is paused for 30 seconds, after a rate limit (HTTP 429) for 60 seconds.
+Maximum duration in milliseconds of a live book or online tablebase request (the lookup is done on the engine's clock). With a clock (or `go movetime`) a request also never takes more than half of the optimum time for the move, and the live books are not queried if less than 100 ms would be left for the request, so that a slow server cannot make the engine lose on time. After a network or server error the live book is paused for 30 seconds, after a rate limit (HTTP 429) for 60 seconds.
 
 #### LiveBook Lichess Games
 _Boolean, Default: False_  
@@ -284,13 +284,22 @@ If enabled, the engine will use the ChessDB live book by querying the ChessDB AP
 _Integer, Default: 255, Min: 1, Max: 255_  
 Specifies the depth to reach using the live book in plies. The depth determines how many half-moves the engine will consider from the current position.
 
+#### LiveBook Width
+_Integer, Default: 1, Min: 1, Max: 20_  
+The opening live books (Proxy, ChessDB, Lichess Player, Lichess Games, Lichess Masters) choose the move at random, with the same probability, among the best move and at most **LiveBook Width** - 1 moves equivalent to it, as **Book N Width** does for the CTG/BIN books. With 1 (default) the best move is always played. Equivalent moves:
+- **ChessDB**: the moves ranked best (`!`, rank 2) by ChessDB, i.e. a few centipawns from the best one at most. The order is the ChessDB score.
+- **Lichess Player, Games and Masters**: the moves whose success rate (wins + draws / 2 for the side to move, the win probability of the Shashin zones) is in the same Shashin zone as the best move and that, as for the BIN books, have been played in at least 0.5% of the games. The order is the number of wins, then of draws.
+- **Proxy**: the proxy answers a single move (see **LiveBook Proxy Diversity**).
+
+The online tablebases always play the best move. The live books, as the CTG/BIN books, are not used with `go infinite`, `go mate`, `go depth` and `go nodes`; they are used when pondering, so that on a ponderhit the book move is played at once.
+
 #### ChessDB Tablebase
 _Boolean, Default: False_  
-If enabled, allows the engine to query the ChessDB API for Tablebase data, up to 7 pieces. This provides perfect endgame knowledge for positions with up to 7 pieces.
+If enabled, allows the engine to query the ChessDB API for Tablebase data, up to 7 pieces. This provides perfect endgame knowledge for positions with up to 7 pieces. The online tablebases are used only if the Syzygy tablebases cannot probe the position (missing files, **SyzygyProbeLimit** lower than the number of pieces, castling rights); with at most 7 pieces the opening live books are never used.
 
 #### Lichess Tablebase
 _Boolean, Default: False_  
-If enabled, allows the engine to query the Lichess API for Tablebase data, up to 7 pieces. This option also provides perfect endgame knowledge for positions with up to 7 pieces.
+If enabled, allows the engine to query the Lichess API for Tablebase data, up to 7 pieces. This option also provides perfect endgame knowledge for positions with up to 7 pieces. As for **ChessDB Tablebase**, it is used only if the Syzygy tablebases cannot probe the position.
 
 #### ChessDB Contribute
 _Boolean, Default: False_  

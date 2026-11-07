@@ -14,8 +14,10 @@ uint32_t Wdl::get_draws() const { return draws; }
 
 uint32_t Wdl::get_losses() const { return losses; }
 
+uint64_t Wdl::get_games() const { return get_sum(); }
+
 double Wdl::get_win_probability() const {
-    uint32_t sum = get_sum();
+    const uint64_t sum = get_sum();
 
     if (sum == 0)
     {
@@ -26,7 +28,7 @@ double Wdl::get_win_probability() const {
 }
 
 double Wdl::get_draw_probability() const {
-    const uint32_t sum = get_sum();
+    const uint64_t sum = get_sum();
 
     if (sum == 0)
     {
@@ -37,7 +39,7 @@ double Wdl::get_draw_probability() const {
 }
 
 double Wdl::get_loss_probability() const {
-    const uint32_t sum = get_sum();
+    const uint64_t sum = get_sum();
 
     if (sum == 0)
     {
@@ -48,7 +50,7 @@ double Wdl::get_loss_probability() const {
 }
 
 double Wdl::get_success_probability() const {
-    const uint32_t sum = get_sum();
+    const uint64_t sum = get_sum();
 
     if (sum == 0)
     {
@@ -60,7 +62,8 @@ double Wdl::get_success_probability() const {
 
 Wdl* Wdl::flip() const { return new Wdl(losses, draws, wins); }
 
-uint32_t Wdl::get_sum() const { return wins + draws + losses; }
+// In 64 bits: the counts of the Lichess explorer may overflow 32 bits when summed
+uint64_t Wdl::get_sum() const { return uint64_t(wins) + draws + losses; }
 
 bool Wdl::operator==(const Wdl& other) const {
     return wins == other.wins && draws == other.draws && losses == other.losses;

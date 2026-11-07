@@ -1,7 +1,9 @@
 #ifdef USE_LIVEBOOK
     #include "BaseLivebook.h"
     #include <algorithm>
+    #include <cstdint>
     #include <iostream>
+    #include <random>
     #include "../misc.h"
 using namespace Alexander::Livebook;
 
@@ -30,7 +32,62 @@ static size_t curl_write(void* contents, const size_t size, const size_t nmemb, 
 
 void BaseLivebook::set_timeout(const long timeout_ms_) { timeoutMs = std::max(timeout_ms_, 1L); }
 
-long BaseLivebook::get_timeout() { return timeoutMs; }
+void BaseLivebook::set_time_budget(const long budget_ms_) { budgetMs = std::max(budget_ms_, 0L); }
+
+long BaseLivebook::get_timeout() {
+    const long timeout = timeoutMs;
+    const long budget  = budgetMs;
+
+    return budget > 0 ? std::min(timeout, budget) : timeout;
+}
+
+std::vector<std::string> BaseLivebook::choices(Moves moves_, const size_t width_) const {
+    std::vector<std::string> result;
+
+    if (moves_.empty() || width_ == 0)
+    {
+        return result;
+    }
+
+    // Best first. Stable: on ties the order of the server is kept
+    std::stable_sort(moves_.begin(), moves_.end(),
+                     [](const auto& a, const auto& b) { return a.second > b.second; });
+
+    const Analysis& best = moves_.front().second;
+
+    for (const auto& [uci, analysis] : moves_)
+    {
+        if (result.size() >= width_)
+        {
+            break;
+        }
+
+        if (result.empty() || is_equivalent(best, analysis, moves_))
+        {
+            result.push_back(uci);
+        }
+    }
+
+    return result;
+}
+
+std::string BaseLivebook::pick(const std::vector<std::string>& choices_) {
+    if (choices_.empty())
+    {
+        return "";
+    }
+
+    // Only the main thread probes the live books
+    static std::mt19937_64 randomEngine(uint64_t(std::random_device{}()) ^ uint64_t(now()));
+
+    return choices_[std::uniform_int_distribution<size_t>(0, choices_.size() - 1)(randomEngine)];
+}
+
+bool BaseLivebook::is_equivalent([[maybe_unused]] const Analysis& best_,
+                                 [[maybe_unused]] const Analysis& other_,
+                                 [[maybe_unused]] const Moves&    moves_) const {
+    return false;
+}
 
 void BaseLivebook::clean_buffer_from_terminator() {
     if (readBuffer.empty())
@@ -45,14 +102,26 @@ void BaseLivebook::clean_buffer_from_terminator() {
     }
 }
 
+BaseLivebook::~BaseLivebook() {
+    if (curl)
+    {
+        curl_easy_cleanup(curl);
+    }
+}
+
 // Perform an HTTP request to the given URI and store the response in readBuffer
 CURLcode BaseLivebook::do_request(const std::string&              uri,
                                   const std::vector<std::string>& headers_) {
     readBuffer.clear();
     httpStatus = 0;
 
-    CURL* curl = curl_easy_init();
-    if (!curl)
+    // The handle is kept between the requests: its connections (and DNS cache) are reused,
+    // which saves the TCP and TLS handshakes on our clock. The options are set every time.
+    if (curl)
+    {
+        curl_easy_reset(curl);
+    }
+    else if (!(curl = curl_easy_init()))
     {
         report(uri, "failed to initialize cURL");
         return CURLE_FAILED_INIT;
@@ -72,6 +141,8 @@ CURLcode BaseLivebook::do_request(const std::string&              uri,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    // Compressed answers if cURL supports them ("": all the encodings it knows)
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
     // Hosts move (e.g. explorer.lichess.ovh -> explorer.lichess.org): follow the
     // redirects. cURL does not forward the Authorization header to another host.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -86,8 +157,9 @@ CURLcode BaseLivebook::do_request(const std::string&              uri,
 
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpStatus);
 
+    // The list must outlive the transfer only: the next request sets its own (after a reset)
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr);
     curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
 
     return res;
 }
