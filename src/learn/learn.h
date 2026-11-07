@@ -1,7 +1,9 @@
 #ifndef LEARN_H_INCLUDED
 #define LEARN_H_INCLUDED
 
+#include <string>
 #include <unordered_map>
+#include <vector>
 #include "../types.h"
 #include "../ucioption.h"
 #include "../position.h"
@@ -39,7 +41,7 @@ class LearningData {
     std::vector<void*>                                     mainDataBuffers;
     std::vector<void*>                                     newMovesDataBuffers;
     bool                                                   load(const std::string& filename);
-    void insert_or_update(PersistedLearningMove* plm, bool qLearning);
+    bool insert_or_update(PersistedLearningMove* plm, bool qLearning);
 
    public:
     LearningData();
@@ -68,6 +70,8 @@ class LearningData {
     std::vector<LearningMove*> probe(Alexander::Key key);
     static void                sortLearningMoves(std::vector<LearningMove*>& learningMoves);
     static void                show_exp(const Alexander::Position& pos);
+    // [SC:learning] GUI-readable variant ("info string" lines) for the "Show Experience" button
+    static void show_exp_info(const Alexander::Position& pos, bool experienceBook);
 };
 
 extern LearningData LD;
