@@ -558,7 +558,8 @@ std::string compose_verdict(Position&          pos,
     }
 
     // ---- Pieces --------------------------------------------------------------------------------
-    // Best / worst piece: efficiency of the ablation value (value / normal value of the type)
+    // Best / worst piece: efficiency of the paired ablation value (100% = as good as the
+    // equivalent enemy pieces); single ablation for the pieces without counterpart
     const PlanPiece *ub = nullptr, *uw = nullptr, *tb = nullptr, *tw = nullptr;
     for (const auto& p : f.pieces)
     {
@@ -588,11 +589,21 @@ std::string compose_verdict(Position&          pos,
                   "of the passed pawns (or the opposition) decides. ";
         else
         {
+            // "efficiency 107%, +0.20 pawns compared with the equivalent enemy pieces"
+            auto effText = [&](const PlanPiece& p) {
+                std::stringstream e;
+                e << "efficiency " << p.efficiency << "%";
+                if (p.counterparts)
+                    e << ", " << cp_str(p.cp) << " compared with the equivalent enemy pieces";
+                else
+                    e << " of its normal value, no equivalent enemy piece";
+                return e.str();
+            };
             if (ub && uw && ub != uw)
                 ss << "Your most effective piece is " << piece_on(ub->pc, ub->sq) << " ("
-                   << ub->efficiency << "% of its normal value); your least effective is "
-                   << piece_on(uw->pc, uw->sq) << " (" << uw->efficiency
-                   << "%): improving it is the first positional task (Makogonov's principle). ";
+                   << effText(*ub) << "); your least effective is " << piece_on(uw->pc, uw->sq)
+                   << " (" << effText(*uw)
+                   << "): improving it is the first positional task (Makogonov's principle). ";
             else if (ub)
                 ss << "Your only piece, " << piece_on(ub->pc, ub->sq)
                    << ", must be kept as active as possible. ";
@@ -603,7 +614,7 @@ std::string compose_verdict(Position&          pos,
                    << "'s problem piece, while " << piece_on(tb->pc, tb->sq)
                    << " is its most effective unit. ";
             for (const auto& p : f.pieces)
-                if (type_of(p.pc) != PAWN && p.cp < 0)
+                if (type_of(p.pc) != PAWN && p.singleCp < 0)
                     ss << (color_of(p.pc) == us
                              ? "The evaluation would even prefer you without " + piece_on(p.pc, p.sq)
                                  + ": it is badly placed, tied down or in the way. "
@@ -619,7 +630,7 @@ std::string compose_verdict(Position&          pos,
                 for (const auto& p : f.pieces)
                     if (p.sq == s)
                         pi = &p;
-                if (same >= 4 && pi && pi->efficiency < 95)
+                if (same >= 4 && pi && pi->efficiency < 100)
                     ss << "Your bishop on " << UCIEngine::square(s)
                        << " is a bad bishop, hemmed in by its own pawns. ";
             }
@@ -932,8 +943,9 @@ std::string compose_verdict(Position&          pos,
         auto shield = [&](Color c) {
             const Square ksq     = pos.square<KING>(c);
             int          missing = 0;
+            const Bitboard shieldRanks = c == WHITE ? (Rank2BB | Rank3BB) : (Rank7BB | Rank6BB);
             for (int fl = std::max(0, int(file_of(ksq)) - 1); fl <= std::min(7, int(file_of(ksq)) + 1); ++fl)
-                missing += !(pos.pieces(c, PAWN) & file_bb(File(fl)));
+                missing += !(pos.pieces(c, PAWN) & file_bb(File(fl)) & shieldRanks);
             return missing;
         };
         auto ring = [&](Color c) {

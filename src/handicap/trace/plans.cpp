@@ -303,9 +303,13 @@ std::string explain_terms(const std::vector<std::pair<int, int>>& d, int maxItem
 struct PieceValue_ {
     Square    sq;
     Piece     pc;
-    int       cp;          // value for its owner (cp, UCI scale)
-    double    pawns;       // same value in pawn units
-    int       efficiency;  // value / nominal value of the piece type, in %
+    int       cp;            // paired ablation value for its owner (cp, UCI scale); single
+                             // ablation when the piece has no counterpart
+    double    pawns;         // same value in pawn units
+    int       singleCp;      // single ablation value (cp): < 0 the owner is better off without it
+    int       counterparts;  // equivalent enemy pieces averaged in 'cp' (0: single ablation)
+    int       efficiency;    // paired: 100% + cp in % of the nominal value (1/3/3/5/9 pawns);
+                             // single: value / nominal value of the piece type, in %
 };
 
 struct Candidate {
@@ -376,11 +380,18 @@ std::string generate_plans_analysis(Position&          pos,
     ss << "\n";
 
     // ---------------------------------------------------------------------
-    // 1. PIECE VALUES BY ABLATION
+    // 1. PIECE VALUES BY PAIRED ABLATION
+    // The piece and an equivalent enemy piece (pawn-pawn, minor-minor with knight and bishop
+    // interchangeable, rook-rook, queen-queen) are removed together, so that the material stays
+    // balanced: the change of the evaluation measures how much better (or worse) the piece is
+    // than its counterpart. The value is the average over all the equivalent enemy pieces.
+    // Pieces without counterpart fall back to the single ablation; the single ablation is also
+    // kept for every piece, to detect the pieces the owner would be better off without.
     // ---------------------------------------------------------------------
     std::vector<PieceValue_> values;
     std::array<int, SQUARE_NB> boardValue{};
-    std::array<bool, SQUARE_NB> hasValue{};
+    std::array<bool, SQUARE_NB> hasValue{}, boardPaired{};
+    auto pairClass = [](PieceType pt) { return pt == BISHOP ? KNIGHT : pt; };
     for (Square s = SQ_A1; s <= SQ_H8; ++s)
     {
         Piece pc = pos.piece_on(s);
@@ -391,20 +402,53 @@ std::string generate_plans_analysis(Position&          pos,
         Value w;
         if (!eval_edited(b, pos, w))
             continue;
-        const Value v   = color_of(pc) == WHITE ? q0White - w : w - q0White;
+        const Value v = color_of(pc) == WHITE ? q0White - w : w - q0White;
         PieceValue_ pv;
-        pv.sq         = s;
-        pv.pc         = pc;
-        pv.cp         = cp(v);
-        pv.pawns      = double(v) / pawnUnit;
+        pv.sq           = s;
+        pv.pc           = pc;
+        pv.singleCp     = cp(v);
+        pv.cp           = pv.singleCp;
+        pv.pawns        = double(v) / pawnUnit;
+        pv.counterparts = 0;
         pv.efficiency = int(std::lround(100.0 * v / std::max(1, int(nominal(type_of(pc))))));
+
+        // Paired ablation
+        int64_t sum = 0;
+        int n   = 0;
+        for (Square t = SQ_A1; t <= SQ_H8; ++t)
+        {
+            const Piece q = pos.piece_on(t);
+            if (q == NO_PIECE || type_of(q) == KING || color_of(q) == color_of(pc)
+                || pairClass(type_of(q)) != pairClass(type_of(pc)))
+                continue;
+            auto b2 = pos.piece_array();
+            b2[s] = b2[t] = NO_PIECE;
+            Value w2;
+            if (!eval_edited(b2, pos, w2))
+                continue;
+            sum += color_of(pc) == WHITE ? q0White - w2 : w2 - q0White;
+            ++n;
+        }
+        if (n)
+        {
+            static constexpr int Nominal[] = {0, 1, 3, 3, 5, 9, 0};
+            const Value          pv2       = Value(sum / n);
+            pv.cp           = cp(pv2);
+            pv.pawns        = double(pv2) / pawnUnit;
+            pv.counterparts = n;
+            pv.efficiency   = 100 + int(std::lround(double(pv.cp) / Nominal[type_of(pc)]));
+        }
         values.push_back(pv);
-        boardValue[s] = int(std::lround(pv.pawns * 100));
-        hasValue[s]   = true;
+        boardValue[s]  = int(std::lround(pv.pawns * 100));
+        hasValue[s]    = true;
+        boardPaired[s] = n > 0;
     }
 
-    ss << "--- 1. PIECE VALUES BY ABLATION (what each piece is worth HERE) ---\n";
-    ss << "Value = evaluation lost by the owner if the piece disappeared (pawn units).\n";
+    ss << "--- 1. PIECE VALUES BY PAIRED ABLATION (what each piece is worth HERE) ---\n";
+    ss << "Value = evaluation lost by the owner if the piece and an equivalent enemy piece\n"
+       << "disappeared together (pawn-pawn, minor-minor, rook-rook, queen-queen; average over\n"
+       << "all the equivalent enemy pieces), pawn units: > 0 the piece is worth more than its\n"
+       << "counterparts. '*' = no counterpart: single ablation (value of the piece alone).\n";
     for (int ri = RANK_8; ri >= RANK_1; --ri)
     {
         const Rank r = Rank(ri);
@@ -421,7 +465,7 @@ std::string generate_plans_analysis(Position&          pos,
             if (hasValue[s])
                 ss << " " << std::setw(5) << std::showpos << std::fixed
                    << std::setprecision(std::abs(boardValue[s]) >= 1000 ? 1 : 2)
-                   << boardValue[s] / 100.0 << std::noshowpos << " |";
+                   << boardValue[s] / 100.0 << std::noshowpos << (boardPaired[s] ? " |" : "*|");
             else
                 ss << "       |";
         }
@@ -439,14 +483,15 @@ std::string generate_plans_analysis(Position&          pos,
         return v;
     };
 
-    ss << "Piece efficiency (value / normal value of the piece type), worst to best:\n";
+    ss << "Piece efficiency (100% + value in % of the nominal value 1/3/3/5/9: 100% = as good "
+          "as\nits counterparts; '*': value / normal value of the piece type), worst to best:\n";
     for (Color c : {WHITE, BLACK})
     {
         auto v = ranked(c, true);
         ss << "  " << color_name(c) << ": ";
         for (size_t i = 0; i < v.size(); ++i)
             ss << (i ? ", " : "") << piece_label(v[i].pc, v[i].sq) << " " << v[i].efficiency
-               << "%";
+               << "%" << (v[i].counterparts ? "" : "*");
         if (v.empty())
             ss << "(no pieces)";
         ss << "\n";
@@ -466,8 +511,22 @@ std::string generate_plans_analysis(Position&          pos,
            << " (" << fmt_pawns(mm.second->pawns) << "), least useful "
            << UCIEngine::square(mm.first->sq) << " (" << fmt_pawns(mm.first->pawns) << ")\n";
     }
-    ss << "  (Efficiency > 120%: the piece does more than its material; < 80%: passive or "
-          "badly placed; a negative pawn value means the pawn is a liability.)\n\n";
+    {
+        std::vector<std::string> burdens;
+        for (const auto& p : values)
+            if (type_of(p.pc) != PAWN && p.singleCp < 0)
+                burdens.push_back(piece_label(p.pc, p.sq) + " (" + fmt_cp(p.singleCp) + ")");
+        if (!burdens.empty())
+        {
+            ss << "  Burdens (single ablation < 0: the owner is better off without them): ";
+            for (size_t i = 0; i < burdens.size(); ++i)
+                ss << (i ? ", " : "") << burdens[i];
+            ss << "\n";
+        }
+    }
+    ss << "  (Paired efficiency >= 110%: clearly better than the equivalent enemy pieces; < 90%:\n"
+          "   passive or badly placed. '*' efficiency > 120% / < 80%: the same for a piece without\n"
+          "   counterpart. A negative pawn value: the pawn is worth less than the enemy pawns.)\n\n";
 
     // ---------------------------------------------------------------------
     // 2. TRADE ADVISOR
@@ -521,7 +580,7 @@ std::string generate_plans_analysis(Position&          pos,
     std::sort(F.trades.begin(), F.trades.end(),
               [](const auto& a, const auto& b) { return a.cpWhite > b.cpWhite; });
     for (const auto& p : values)
-        F.pieces.push_back({p.sq, p.pc, p.cp, p.efficiency});
+        F.pieces.push_back({p.sq, p.pc, p.cp, p.efficiency, p.singleCp, p.counterparts});
     if (hasQueenTrade)
         ss << "  Queen trade      : " << fmt_cp(queenTrade) << " -> "
            << (queenTrade > 8    ? "White should seek it, Black should avoid it"

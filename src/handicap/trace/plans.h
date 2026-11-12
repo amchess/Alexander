@@ -16,8 +16,12 @@ namespace Eval {
 struct PlanPiece {
     Square sq;
     Piece  pc;
-    int    cp;          // value for its owner
-    int    efficiency;  // value / nominal value of its type, %
+    int    cp;            // paired ablation value for its owner (piece and an equivalent enemy
+                          // piece removed together, averaged); single ablation without counterpart
+    int    efficiency;    // paired: 100% + cp in % of the nominal value (1/3/3/5/9 pawns);
+                          // single: value / nominal value of its type, %
+    int    singleCp;      // single ablation value: < 0 the owner is better off without the piece
+    int    counterparts;  // equivalent enemy pieces averaged in 'cp' (0: single ablation)
 };
 
 struct PlanCandidate {
