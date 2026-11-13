@@ -2,13 +2,24 @@
     #include "LichessOpening.h"
 
     #include <algorithm>
+    #include <cmath>
+    #include <cstdint>
     #include <limits>
 
     #include "json/json.hpp"
+    #include "../shashin/shashin_types.h"
 
 using namespace Alexander::Livebook;
 
 namespace {
+
+// Shashin zone of the results of the games: win probability = success rate
+Alexander::ShashinPosition shashin_range(const Wdl& wdl_) {
+    const auto win  = static_cast<int>(std::lround(100 * wdl_.get_success_probability()));
+    const auto draw = static_cast<int>(std::lround(100 * wdl_.get_draw_probability()));
+
+    return Alexander::shashin_range_by_probability(win, draw);
+}
 
 uint32_t games_count(const nlohmann::json& move_, const char* key_) {
     if (!move_.contains(key_) || !move_[key_].is_number_integer())
@@ -75,5 +86,32 @@ std::string LichessOpening::auth_hint() const {
     }
 
     return ". The token in 'LiveBook Lichess Token' is invalid, expired or revoked";
+}
+
+bool LichessOpening::is_equivalent(const Analysis& best_,
+                                   const Analysis& other_,
+                                   const Moves&    moves_) const {
+    if (!best_.has_wdl() || !other_.has_wdl())
+    {
+        return false;
+    }
+
+    uint64_t games = 0;
+
+    for (const auto& move : moves_)
+    {
+        if (move.second.has_wdl())
+        {
+            games += move.second.get_wdl()->get_games();
+        }
+    }
+
+    // As the BIN books: no move played in less than 0.5% of the games
+    if (other_.get_wdl()->get_games() * 200 < games)
+    {
+        return false;
+    }
+
+    return shashin_range(*best_.get_wdl()) == shashin_range(*other_.get_wdl());
 }
 #endif

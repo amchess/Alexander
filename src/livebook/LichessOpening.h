@@ -22,6 +22,13 @@ class LichessOpening: public LichessLivebook {
 
     [[nodiscard]] std::vector<std::string> request_headers() const override;
     [[nodiscard]] std::string              auth_hint() const override;
+
+    // Statistics of games: a move is equivalent to the best one if its success rate (wins +
+    // draws / 2, the win probability of the Shashin zones) is in the same Shashin zone and,
+    // as for the BIN books, it has been played in at least 0.5% of the games
+    [[nodiscard]] bool is_equivalent(const Analysis& best_,
+                                     const Analysis& other_,
+                                     const Moves&    moves_) const override;
 };
 }
 

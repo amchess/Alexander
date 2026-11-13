@@ -191,12 +191,16 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
       }));
 
     // From learning
+    // [SC:learning] Off too reaches the learning data: before, switching back to Off was ignored
+    // and the engine kept learning until it was restarted. Leaving Self in the middle of a game,
+    // what Self learned so far goes into the experience, as on quit
     options.add("Persisted learning", Option("Off var Off var Standard var Self", "Off",
                                              [this](const Option& o) -> std::optional<std::string> {
-                                                 if (!(o == "Off"))
-                                                 {
-                                                     LD.set_learning_mode(get_options(), o);
-                                                 }
+                                                 if (LD.learning_mode() == LearningMode::Self
+                                                     && !LD.is_paused() && o != "Self")
+                                                     putQLearningTrajectoryIntoLearningTable();
+
+                                                 LD.set_learning_mode(get_options(), o);
                                                  return std::optional<std::string>{};
                                              }));
 
@@ -206,13 +210,23 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
                 }));
 
     options.add("Experience Book", Option(false, [this](const Option&) {
-                    LD.init(get_options());
+                    // [SC:learning] With Persisted learning on, the experience is loaded anyway:
+                    // (re)load it only when the book is its only user
+                    if (!LD.is_enabled())
+                        LD.init(get_options());
                     return std::nullopt;
                 }));
 
     options.add("Experience Book Max Moves", Option(100, 1, 100));
 
     options.add("Experience Book Min Depth", Option(4, 1, 255));
+
+    // [SC:learning] Lists the stored moves for the current position (the last 'position') as
+    // "info string" lines; the console command "showexp" stays as it was
+    options.add("Show Experience", Option([this](const Option&) {
+                    LD.show_exp_info(pos, bool(options["Experience Book"]));
+                    return std::nullopt;
+                }));
 
     // From MCTS
     options.add("MCTS by Shashin", Option(false));
@@ -278,6 +292,11 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add("LiveBook Depth", Option(255, 1, 255, [](const Option& o) {
                     Search::set_livebook_depth(o);
+                    return std::nullopt;
+                }));
+
+    options.add("LiveBook Width", Option(1, 1, 20, [](const Option& o) {
+                    Search::set_livebook_width(o);
                     return std::nullopt;
                 }));
 
@@ -404,6 +423,16 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
     if (err.has_value())
         return err;
 
+    // [SC:learning] begin
+    // Learning paused because the game was found decided: it stays paused only if this
+    // position continues that game, that is the decided position is in its history (with a
+    // fen and no moves only the position itself is known). Otherwise it is a new game or another
+    // position to analyse, and learning resumes. The moves are learned (depth 0) after that
+    bool continuesDecidedGame = LD.is_enabled() && LD.is_decided_position(pos.key());
+
+    std::vector<PersistedLearningMove> playedMoves;
+    // [SC:learning] end
+
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
@@ -412,7 +441,7 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
             return PositionSetError("Illegal move: " + move);
 
         //Kelly begin
-        if (LD.is_enabled() && LD.learning_mode() != LearningMode::Self && !LD.is_paused())
+        if (LD.is_enabled() && LD.learning_mode() != LearningMode::Self)
         {
             PersistedLearningMove persistedLearningMove;
 
@@ -421,13 +450,25 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
             persistedLearningMove.learningMove.move        = m;
             persistedLearningMove.learningMove.score       = VALUE_NONE;
             persistedLearningMove.learningMove.performance = WDLModel::get_win_probability(0, pos);
-            LD.add_new_learning(persistedLearningMove.key, persistedLearningMove.learningMove);
+            playedMoves.push_back(persistedLearningMove);
         }
         //Kelly end
         states->emplace_back();
         pos.do_move(m, states->back());
         //for classical
+
+        if (LD.is_enabled() && LD.is_decided_position(pos.key()))  // [SC:learning]
+            continuesDecidedGame = true;
     }
+
+    // [SC:learning] begin
+    if (LD.is_enabled() && LD.is_paused() && !continuesDecidedGame)
+        LD.resume();
+
+    if (!LD.is_paused())
+        for (const auto& plm : playedMoves)
+            LD.add_new_learning(plm.key, plm.learningMove);
+    // [SC:learning] end
 
     return std::nullopt;
 }

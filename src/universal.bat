@@ -2,7 +2,7 @@
 setlocal enableextensions enabledelayedexpansion
 
 REM ==========================================================================
-REM  universal.bat  -  Alexander 9  -  binario UNIVERSAL x86-64 (MinGW/MSYS2)
+REM  universal.bat  -  Alexander 9.2  -  binario UNIVERSAL x86-64 (MinGW/MSYS2)
 REM  Da lanciare DENTRO la cartella "src" del sorgente.
 REM
 REM  ARCH=x86-64-universal compila 8 slice
@@ -46,16 +46,16 @@ if not exist alexander.exe goto :fallita
 strip alexander.exe
 REM move /y invece di ren: ren fallisce se l'exe esiste gia' e il clean finale
 REM cancellerebbe quello nuovo, lasciando il binario della build precedente.
-move /y alexander.exe Alexander9-universal.exe >nul
+move /y alexander.exe Alexander9.2-universal.exe >nul
 if errorlevel 1 goto :fallita
 
 REM --- verifica: il bench deve girare con la slice scelta per questa CPU -----
 set "CHECKDIR=%TEMP%\alexander_universal_check"
 if exist "%CHECKDIR%" rmdir /s /q "%CHECKDIR%"
 mkdir "%CHECKDIR%"
-copy /y Alexander9-universal.exe "%CHECKDIR%\Alexander9-universal.exe" >nul
+copy /y Alexander9.2-universal.exe "%CHECKDIR%\Alexander9.2-universal.exe" >nul
 pushd "%CHECKDIR%"
-Alexander9-universal.exe bench 16 1 8 >nul 2>&1
+Alexander9.2-universal.exe bench 16 1 8 >nul 2>&1
 set "RC=%errorlevel%"
 popd
 rmdir /s /q "%CHECKDIR%"
@@ -66,11 +66,11 @@ if not "%RC%"=="0" (
 echo [universal] OK: bench eseguito
 
 REM --- verifica: stampa la slice selezionata sulla CPU corrente -------------
-Alexander9-universal.exe compiler
+Alexander9.2-universal.exe compiler
 
 mingw32-make clean
 echo.
-echo [universal] OK: Alexander9-universal.exe
+echo [universal] OK: Alexander9.2-universal.exe
 pause
 exit /b 0
 

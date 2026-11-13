@@ -4,8 +4,10 @@
 
     #include <atomic>
     #include <chrono>
+    #include <cstddef>
     #include <map>
     #include <string>
+    #include <utility>
     #include <vector>
     #include "analysis/Analysis.h"
 
@@ -19,6 +21,11 @@ extern "C" {
     #undef max
 
 namespace Alexander::Livebook {
+
+// The moves of a live book (UCI notation) with their analysis, from the point of view of the
+// side to move
+using Moves = std::vector<std::pair<std::string, Analysis>>;
+
 class BaseLivebook {
    public:
     BaseLivebook()                               = default;
@@ -26,22 +33,38 @@ class BaseLivebook {
     BaseLivebook& operator=(const BaseLivebook&) = delete;
 
     // Virtual destructor for proper cleanup of derived classes
-    virtual ~BaseLivebook() = default;
+    virtual ~BaseLivebook();
 
     // Pure virtual function to lookup analysis for a given UCI position
     virtual std::vector<std::pair<std::string, Analysis>> lookup(const Position& position) = 0;
 
+    // The moves among which the book move is chosen at random (option "LiveBook Width"): the
+    // best move first, then the moves equivalent to it (see is_equivalent), at most width_.
+    // The moves are sorted with Analysis::operator>; on ties the order of the server is kept
+    // (e.g. the online tablebases send the moves best first).
+    [[nodiscard]] std::vector<std::string> choices(Moves moves_, size_t width_) const;
+
+    // One of the choices, with the same probability (as the CTG/BIN books do with their width)
+    static std::string pick(const std::vector<std::string>& choices_);
+
     // Maximum duration of an HTTP request in milliseconds. The lookup is done
     // while our clock is running, so a request must never be allowed to hang.
     static void set_timeout(long timeout_ms_);
+    // Further limit set by the search from the time for the current move (0 = no limit)
+    static void set_time_budget(long budget_ms_);
+    // The duration allowed to a request: the timeout, within the time budget
     static long get_timeout();
 
    protected:
-    // CURL* curl = nullptr; // cURL handle
     std::string readBuffer;      // Buffer to store the response data
     long        httpStatus = 0;  // HTTP status of the last request (0 = no response)
 
     void clean_buffer_from_terminator();
+
+    // True if other_ can be played instead of best_, the best move of moves_. By default no
+    // move is equivalent to the best one: the best move is always played.
+    [[nodiscard]] virtual bool
+    is_equivalent(const Analysis& best_, const Analysis& other_, const Moves& moves_) const;
 
     // Function to perform an HTTP request
     CURLcode do_request(const std::string& uri, const std::vector<std::string>& headers_ = {});
@@ -60,6 +83,10 @@ class BaseLivebook {
 
    private:
     static inline std::atomic<long> timeoutMs{5000};
+    static inline std::atomic<long> budgetMs{0};
+
+    // Kept between the requests: the connection to the server is reused (no new TLS handshake)
+    CURL* curl = nullptr;
 
     std::chrono::steady_clock::time_point suspendedUntil{};
 

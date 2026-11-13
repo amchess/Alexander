@@ -32,6 +32,7 @@
 #include <cstdlib>
 #include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -200,10 +201,8 @@ bool is_shuffling(Move move, Stack* const ss, const Position& pos) {
 
 // livebook begin
 #ifdef USE_LIVEBOOK
-//livebook depth begin
-int livebook_depth_count = 0;
-int max_book_depth       = 255;
-//livebook depth end
+int    max_book_depth = 255;  // LiveBook Depth (plies)
+size_t livebook_width = 1;    // LiveBook Width
 
 using Livebooks = std::vector<std::unique_ptr<Livebook::BaseLivebook>>;
 Livebooks opening_livebooks, endgame_livebooks;
@@ -225,6 +224,10 @@ bool _proxy_diversity     = false;
 auto contributor = Livebook::ChessDBContributor();
 
 void Search::set_livebook_depth(const int book_depth) { max_book_depth = book_depth; }
+
+void Search::set_livebook_width(const int book_width) {
+    livebook_width = size_t(std::max(book_width, 1));
+}
 
 void Search::set_proxy_url(const std::string& proxy_url) {
     _proxy_url = proxy_url;
@@ -360,16 +363,94 @@ void Search::set_proxy_diversity(const bool proxy_diversity) {
     _proxy_diversity = proxy_diversity;
     update_livebooks();
 }
+
+namespace {
+
+// No live book request if less time is left for it (the minimum of LiveBook Timeout)
+constexpr TimePoint MinLivebookTime = 100;
+
+// The live books are probed on our clock: a request may take at most half of the optimum
+// time for the current move, so that a slow server cannot make us lose on time.
+// 0 = no limit but LiveBook Timeout (no clock: analysis, depth, nodes, ...).
+TimePoint
+livebook_time_budget(const Search::LimitsType& limits, const TimeManagement& tm, const Color us) {
+    if (limits.time[us])
+        return std::max(tm.optimum() / 2, TimePoint(1));
+
+    if (limits.movetime)
+        return std::max(limits.movetime / 2, TimePoint(1));
+
+    return 0;
+}
+
+// A move of the live books that we may play, Move::none() if there is none:
+// - at most 7 units, if the Syzygy tablebases cannot probe the root (as in
+//   Tablebases::rank_root_moves): the best move of the online tablebases;
+// - in the first LiveBook Depth plies: a move of the opening live books, chosen at random
+//   among the best move and the moves equivalent to it (LiveBook Width).
+// The first live book with a move we may play answers.
+Move probe_livebooks(const Position&          pos,
+                     const Search::RootMoves& rootMoves,
+                     const OptionsMap&        options) {
+    const int units   = pos.count<ALL_PIECES>();
+    const int tbLimit = std::min(int(options["SyzygyProbeLimit"]), Tablebases::MaxCardinality);
+
+    const Livebooks* livebooks = nullptr;
+    size_t           width     = 1;
+
+    if (units <= 7)
+    {
+        if (tbLimit < units || pos.can_castle(ANY_CASTLING))
+            livebooks = &endgame_livebooks;
+    }
+    else if (pos.game_ply() < max_book_depth)
+    {
+        livebooks = &opening_livebooks;
+        width     = livebook_width;
+    }
+
+    if (!livebooks)
+        return Move::none();
+
+    for (const auto& livebook : *livebooks)
+    {
+        Livebook::Moves moves = livebook->lookup(pos);
+
+        // Only the legal moves, among the ones of "go searchmoves"
+        moves.erase(std::remove_if(moves.begin(), moves.end(),
+                                   [&](const auto& move) {
+                                       const Move m = UCIEngine::to_move(pos, move.first);
+                                       return !m
+                                           || std::find(rootMoves.begin(), rootMoves.end(), m)
+                                                == rootMoves.end();
+                                   }),
+                    moves.end());
+
+        if (const auto choices = livebook->choices(std::move(moves), width); !choices.empty())
+            return UCIEngine::to_move(pos, Livebook::BaseLivebook::pick(choices));
+    }
+
+    return Move::none();
+}
+
+}  // namespace
 #endif
 // livebook end
 
 // [SC:variety] begin
 void Search::set_variety(const std::string& varietyOption) {
-    if (varietyOption == "Off")
+    // Case insensitive, as the check of the combo values (Option::operator=): before,
+    // "setoption name Variety value standard" was accepted and then ignored (the previous
+    // variety stayed)
+    const auto is = [&varietyOption](const char* v) {
+        return !CaseInsensitiveLess()(varietyOption, v) && !CaseInsensitiveLess()(v, varietyOption);
+    };
+
+    if (is("Off"))
         variety = 0;
-    else if (varietyOption == "Standard")
+    else if (is("Standard"))
         variety = 1;
-    else if (varietyOption == "Psychological")
+    else if (is("Psychological"))
         variety = 2;
 }
 // [SC:variety] end
@@ -521,63 +602,26 @@ void Search::Worker::start_searching() {
                               *std::find(th->worker->rootMoves.begin(), th->worker->rootMoves.end(),
                                          bookMove));
             }
+            else
+                bookMove = Move::none();  // Not playable ("go searchmoves"): search
         }
 
 #ifdef USE_LIVEBOOK
-        if (think && !bookMove)
+        // The time a live book request may take, also the contribution to ChessDB below
+        const TimePoint livebookBudget =
+          livebook_time_budget(limits, main_manager()->tm, rootPos.side_to_move());
+        Livebook::BaseLivebook::set_time_budget(
+          long(std::min<TimePoint>(livebookBudget, std::numeric_limits<long>::max())));
+
+        // The same limits of the CTG/BIN books, but also when pondering (on a ponderhit the
+        // book move is played at once), and only with enough time for an answer
+        if (think && !bookMove
+            && !(limits.infinite || limits.mate || limits.depth || limits.nodes || limits.perft)
+            && (!livebookBudget || livebookBudget >= MinLivebookTime))
         {
-            if (!limits.infinite && !limits.mate)
-            {
-                livebook_depth_count = rootPos.game_ply();
+            bookMove = probe_livebooks(rootPos, rootMoves, options);
 
-                static const Livebooks no_livebooks;
-                const Livebooks*       livebooks = &no_livebooks;
-
-                const std::string& syzygyPath = static_cast<std::string>(options["SyzygyPath"]);
-                int                totalUnits = rootPos.count<ALL_PIECES>();
-
-                if ((totalUnits <= 7)
-                    && (syzygyPath.empty()
-                        || ((!syzygyPath.empty())
-                            && ((int(options["SyzygyProbeLimit"]) < totalUnits)))))
-                {
-                    livebooks = &endgame_livebooks;
-                }
-                else if (livebook_depth_count < max_book_depth)
-                {
-                    livebooks = &opening_livebooks;
-                }
-
-                for (const auto& livebook : *livebooks)
-                {
-                    if (std::vector<std::pair<std::string, Analysis>> output =
-                          livebook->lookup(rootPos);
-                        !output.empty())
-                    {
-                        std::string     uci;
-                        const Analysis* best = nullptr;
-
-                        for (auto& [move, analysis] : output)
-                        {
-                            if (best == nullptr || analysis > *best)
-                            {
-                                best = &analysis;
-                                uci  = move;
-                            }
-                        }
-
-                        if (best != nullptr)
-                        {
-                            bookMove = UCIEngine::to_move(rootPos, uci);
-                            if (bookMove)
-                                livebook_depth_count++;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (bookMove && std::count(rootMoves.begin(), rootMoves.end(), bookMove))
+            if (bookMove)
             {
                 think = false;
                 for (auto&& th : threads)
@@ -587,10 +631,6 @@ void Search::Worker::start_searching() {
                     if (it != rm.end())
                         std::swap(rm[0], *it);
                 }
-            }
-            else
-            {
-                bookMove = Move::none();
             }
         }
 #endif
@@ -660,6 +700,8 @@ void Search::Worker::start_searching() {
             if (!enabledLearningProbe)
                 useLearning = false;
 
+            // [SC:learning] The game is decided: save the experience and stop learning this
+            // game. A position that does not continue it resumes learning (set_position)
             if (is_game_decided(rootPos, (bestThread->rootMoves[0].score)) && LD.is_enabled()
                 && !LD.is_paused())
             {
@@ -668,7 +710,7 @@ void Search::Worker::start_searching() {
 
                 if (!LD.is_readonly())
                     LD.persist(options);
-                LD.pause();
+                LD.pause(rootPos.key());
             }
         }
 
@@ -1228,7 +1270,7 @@ Value Search::Worker::search(
     Move  move, excludedMove, bestMove, expTTMove = Move::none();
     Depth extension, newDepth;
     Value bestValue, value, eval, maxValue, probCutBeta, expTTValue = VALUE_NONE;
-    bool  givesCheck, improving, priorCapture, opponentWorsening, expTTHit = false;
+    bool  givesCheck, improving, priorCapture, opponentWorsening;
     bool  capture, ttCapture, gameCycle = false, updatedLearning = false;
     int   priorReduction;
     Piece movedPiece;
@@ -1329,6 +1371,29 @@ Value Search::Worker::search(
     ss->ttPv     = excludedMove ? ss->ttPv : PvNode || (ttHit && ttData.is_pv);
     ttCapture    = ttData.move && pos.capture_stage(ttData.move);
 
+    // [SC:learning] begin
+    // Experience lookup. Without a TT entry it is done here, so that the static evaluation
+    // (step 5) can use the experience value; with a TT entry after the TT cutoff, as before,
+    // so that a TT cutoff costs no lookup. Before, it was always after the TT cutoff and the
+    // code of step 5 for the experience could never run.
+    const LearningMove* learningMove     = nullptr;
+    const auto          probe_experience = [&]() {
+        if (excludedMove || !LD.is_enabled() || !useLearning)
+            return;
+
+        sibs = LD.probeByMaxDepthAndScore(posKey, learningMove);
+
+        // The score was learned at the root of its search (ply 0), so it is stored as a TT
+        // value: as for the TT, mate and TB distances are converted to this root, and dropped
+        // when the 50 moves rule makes them unreachable. Before, they were used as they were
+        if (learningMove)
+            expTTValue = value_from_tt(learningMove->score, ss->ply, pos.rule50_count());
+    };
+
+    if (!ss->ttHit)
+        probe_experience();
+    // [SC:learning] end
+
     // Step 5. Static evaluation of the position
     Value unadjustedStaticEval = VALUE_NONE;
 
@@ -1354,24 +1419,20 @@ Value Search::Worker::search(
     else
     {
         unadjustedStaticEval = evaluate(pos);
-        if (!LD.is_enabled() || !expTTHit || !updatedLearning)
-        {
-            ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
-            // Static evaluation is saved as it was before adjustment by correction history
-            ttWriter.write(posKey, VALUE_NONE, ss->ttPv, BOUND_NONE, DEPTH_UNSEARCHED, Move::none(),
-                           unadjustedStaticEval, tt.generation());
-        }
-        else
-        {
-            ss->staticEval = eval = expTTValue;
-            if (!is_valid(eval))
-                ss->staticEval = eval =
-                  to_corrected_static_eval(unadjustedStaticEval, correctionValue);
-            if (eval == VALUE_DRAW)
-                eval = value_draw(this->nodes);
-            if (is_valid(expTTValue))
-                eval = expTTValue;
-        }
+        ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
+
+        // Static evaluation is saved as it was before adjustment by correction history
+        ttWriter.write(posKey, VALUE_NONE, ss->ttPv, BOUND_NONE, DEPTH_UNSEARCHED, Move::none(),
+                       unadjustedStaticEval, tt.generation());
+
+        // [SC:learning] The experience value, if searched at least this deep, is a better
+        // position evaluation, as the TT value above. Only 'eval': the static evaluation
+        // trains the correction histories and gives 'improving', so it must stay the real
+        // one (the old code, never executed, also gave the experience value, even a mate,
+        // to ss->staticEval)
+        if (learningMove && learningMove->depth != 0 && learningMove->depth >= depth
+            && is_valid(expTTValue))
+            eval = expTTValue;
     }
 
     if (!expectedPVNode)
@@ -1441,81 +1502,77 @@ Value Search::Worker::search(
     }
 
     // [SC:learning] begin
-    expTTHit        = false;
-    updatedLearning = false;
+    // With a TT entry the experience is looked up only now (see before step 5)
+    if (ss->ttHit)
+        probe_experience();
 
-    if (!excludedMove && LD.is_enabled() && useLearning)
+    if (learningMove)
     {
-        const LearningMove* learningMove = nullptr;
-        sibs                             = LD.probeByMaxDepthAndScore(posKey, learningMove);
-        if (learningMove)
+        assert(sibs);
+
+        enabledLearningProbe = true;
+        if (!ttData.move)
         {
-            assert(sibs);
+            ttData.move = learningMove->move;
+            ttCapture   = ttData.move && pos.capture_stage(ttData.move);
+        }
 
-            enabledLearningProbe = true;
-            expTTHit             = true;
-            if (!ttData.move)
+        // As before, with the depth after the adjustments that follow step 5
+        if (learningMove->depth >= depth)
+        {
+            expTTMove       = learningMove->move;
+            updatedLearning = true;
+        }
+
+        if ((learningMove->depth == 0))
+            updatedLearning = false;
+
+        if (updatedLearning && is_valid(expTTValue))
+        {
+            if (expTTValue < alpha)
+                disableNMAndPC = true;
+            if (expTTValue > alpha && expTTValue < beta)
             {
-                ttData.move = learningMove->move;
-                ttCapture   = ttData.move && pos.capture_stage(ttData.move);
+                expectedPVNode = true;
+                improving      = true;
+            }
+        }
+        // expTTMove, Move::none() when the experience is not deep enough: before, with
+        // learningMove->move, capture_stage(Move::none()) was called (assert in debug builds)
+        bool expTTCapture = expTTMove && pos.capture_stage(expTTMove);
+
+        if (!PvNode && !excludedMove && updatedLearning
+            && learningMove->depth > depth - (expTTValue <= beta) && is_valid(expTTValue)
+            && (cutNode == (expTTValue >= beta) || depth > 4)
+            && (depth > 8 || expTTMove == Move::none() || pos.rule50_count() < 80
+                || (!expTTCapture && type_of(pos.moved_piece(expTTMove)) != PAWN)))
+        {
+            if (expTTMove && expTTValue >= beta)
+            {
+                if (!expTTCapture)
+                    update_quiet_histories(pos, ss, *this, expTTMove, std::min(112 * depth, 695));
+
+                if (prevSq != SQ_NONE && (ss - 1)->moveCount < 5 && !priorCapture)
+                    update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq, -2210);
             }
 
-            if (learningMove->depth >= depth)
+            if (pos.rule50_count() < 96)
             {
-                expTTMove       = learningMove->move;
-                expTTValue      = learningMove->score;
-                updatedLearning = true;
-            }
-
-            if ((learningMove->depth == 0))
-                updatedLearning = false;
-
-            if (updatedLearning && is_valid(expTTValue))
-            {
-                if (expTTValue < alpha)
-                    disableNMAndPC = true;
-                if (expTTValue > alpha && expTTValue < beta)
+                if (depth >= 7 && ttData.move && pos.pseudo_legal(ttData.move)
+                    && pos.legal(ttData.move) && !is_decisive(expTTValue))
                 {
-                    expectedPVNode = true;
-                    improving      = true;
-                }
-            }
-            bool expTTCapture = learningMove->move && pos.capture_stage(expTTMove);
+                    do_move(pos, ttData.move, st, nullptr);
+                    Key nextPosKey                             = pos.key();
+                    auto [ttHitNext, ttDataNext, ttWriterNext] = tt.probe(nextPosKey);
+                    undo_move(pos, ttData.move);
 
-            if (!PvNode && !excludedMove && updatedLearning
-                && learningMove->depth > depth - (expTTValue <= beta) && is_valid(expTTValue)
-                && (cutNode == (expTTValue >= beta) || depth > 4)
-                && (depth > 8 || expTTMove == Move::none() || pos.rule50_count() < 80
-                    || (!expTTCapture && type_of(pos.moved_piece(expTTMove)) != PAWN)))
-            {
-                if (expTTMove && expTTValue >= beta)
-                {
-                    if (!expTTCapture)
-                        update_quiet_histories(pos, ss, *this, expTTMove,
-                                               std::min(112 * depth, 695));
-
-                    if (prevSq != SQ_NONE && (ss - 1)->moveCount < 5 && !priorCapture)
-                        update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq, -2210);
-                }
-
-                if (pos.rule50_count() < 96)
-                {
-                    if (depth >= 7 && ttData.move && pos.pseudo_legal(ttData.move)
-                        && pos.legal(ttData.move) && !is_decisive(expTTValue))
-                    {
-                        do_move(pos, ttData.move, st, nullptr);
-                        Key nextPosKey                             = pos.key();
-                        auto [ttHitNext, ttDataNext, ttWriterNext] = tt.probe(nextPosKey);
-                        undo_move(pos, ttData.move);
-
-                        if (!is_valid(ttDataNext.value))
-                            return expTTValue;
-                        if ((expTTValue >= beta) == (-ttDataNext.value >= beta))
-                            return expTTValue;
-                    }
-                    else
+                    if (!is_valid(ttDataNext.value))
+                        return expTTValue;
+                    if ((expTTValue >= beta) == (-ttDataNext.value >= beta))
                         return expTTValue;
                 }
+                else
+                    return expTTValue;
             }
         }
     }
@@ -2439,7 +2496,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     Key   posKey;
     Move  move, bestMove, expTTMove = Move::none();
     Value bestValue, value, futilityBase, expTTValue = VALUE_NONE;
-    bool  pvHit, givesCheck, capture, expTTHit = false, updatedLearning = false;
+    bool  pvHit, givesCheck, capture, updatedLearning = false;
     int   moveCount;
 
     // Step 1. Initialize node
@@ -2484,9 +2541,6 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         return ttData.value;
 
     // [SC:learning] begin
-    expTTHit        = false;
-    updatedLearning = false;
-
     if (useLearning && LD.is_enabled())
     {
         const LearningMove* learningMove = nullptr;
@@ -2494,20 +2548,21 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         (void) siblings;
         if (learningMove)
         {
-            expTTHit   = true;
-            expTTMove  = learningMove->move;
-            expTTValue = learningMove->score;
+            expTTMove = learningMove->move;
+            // As in search(): mate and TB distances converted to this root
+            expTTValue = value_from_tt(learningMove->score, ss->ply, pos.rule50_count());
 
             if (!ttHit)
                 ttData.move = expTTMove;
 
-            const bool canUseExpTTValue = !PvNode && is_valid(expTTValue);
             // [SC] il ramo Shashin successivo era irraggiungibile (depth >= 2 dopo depth < 0)
-            if (canUseExpTTValue && learningMove->depth >= DEPTH_QS)
-            {
-                updatedLearning = true;
+            updatedLearning = learningMove->depth >= DEPTH_QS && is_valid(expTTValue);
+
+            // At non-PV nodes the experience value is returned at once, as a TT cutoff. At PV
+            // nodes it is used below as a better position evaluation: before, updatedLearning
+            // was set only just before returning, so that code could never run
+            if (!PvNode && updatedLearning)
                 return expTTValue;
-            }
         }
     }
     // [SC:learning] end
@@ -2538,16 +2593,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         }
         else
         {
-            if (expTTHit && updatedLearning && is_valid(expTTValue))
-            {
-                ss->staticEval = bestValue = expTTValue;
-            }
-            else
-            {
-                unadjustedStaticEval = evaluate(pos);
-                ss->staticEval       = bestValue =
-                  to_corrected_static_eval(unadjustedStaticEval, correctionValue);
-            }
+            unadjustedStaticEval = evaluate(pos);
+            ss->staticEval       = bestValue =
+              to_corrected_static_eval(unadjustedStaticEval, correctionValue);
+
+            // [SC:learning] At PV nodes the experience value is a better position evaluation,
+            // as the TT value above: not when decisive, and only for bestValue (see search())
+            if (updatedLearning && !is_decisive(expTTValue))
+                bestValue = expTTValue;
         }
 
         // Stand pat. Return immediately if static value is at least beta
